@@ -20,6 +20,21 @@ function isDouyinDomain(domain) {
   return normalized === DOUYIN_DOMAIN || normalized.endsWith(`.${DOUYIN_DOMAIN}`);
 }
 
+function hostFromUrl(value) {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function cookieAppliesToHost(cookie, host) {
+  const normalizedHost = String(host || 'www.douyin.com').toLowerCase();
+  const normalizedDomain = normalizeCookieDomain(cookie.domain);
+  if (cookie.hostOnly) return normalizedDomain === normalizedHost;
+  return normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`);
+}
+
 function sameSiteForPlaywright(value) {
   if (value === 'lax') return 'Lax';
   if (value === 'strict') return 'Strict';
@@ -40,7 +55,7 @@ function skip(skipped, reason, count = 1) {
   skipped[reason] = (skipped[reason] || 0) + count;
 }
 
-function toPlaywrightCookie(cookie, nowSeconds, skipped) {
+function toPlaywrightCookie(cookie, nowSeconds, skipped, targetHost = 'www.douyin.com') {
   if (!cookie || typeof cookie !== 'object') {
     skip(skipped, 'invalid-cookie');
     return null;
@@ -59,6 +74,10 @@ function toPlaywrightCookie(cookie, nowSeconds, skipped) {
   }
   if (!isDouyinDomain(cookie.domain)) {
     skip(skipped, 'non-douyin-domain');
+    return null;
+  }
+  if (!cookieAppliesToHost(cookie, targetHost)) {
+    skip(skipped, 'non-target-douyin-subdomain');
     return null;
   }
   if (!cookie.path || !String(cookie.path).startsWith('/')) {
@@ -115,7 +134,7 @@ function summarizeSkipped(skipped) {
     .map(([reason, count]) => ({ reason, count }));
 }
 
-function parseCookieAuthContent(content, { now = new Date() } = {}) {
+function parseCookieAuthContent(content, { now = new Date(), targetHost = '' } = {}) {
   let parsed;
   try {
     parsed = JSON.parse(content);
@@ -123,12 +142,18 @@ function parseCookieAuthContent(content, { now = new Date() } = {}) {
     throw new Error('Cookie 文件不是有效 JSON。');
   }
   const exportFile = validateLosslessExport(parsed);
+  const effectiveTargetHost =
+    targetHost ||
+    hostFromUrl(exportFile.sourceUrl) ||
+    hostFromUrl(exportFile.scope?.url) ||
+    hostFromUrl(exportFile.scope?.origin) ||
+    'www.douyin.com';
   const nowSeconds = Math.floor(now.getTime() / 1000);
   const skipped = {};
   const cookies = [];
 
   for (const cookie of exportFile.cookies) {
-    const playwrightCookie = toPlaywrightCookie(cookie, nowSeconds, skipped);
+    const playwrightCookie = toPlaywrightCookie(cookie, nowSeconds, skipped, effectiveTargetHost);
     if (playwrightCookie) cookies.push(playwrightCookie);
   }
 

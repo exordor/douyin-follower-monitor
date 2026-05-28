@@ -91,7 +91,7 @@ npm run dashboard:doubao
 
 ## Cookie 登录态
 
-如果你使用 [Local Cookie Manager](https://github.com/exordor/sunbeam-cookie-jar) 导出了抖音 cookie，可以把无损 JSON 用作平台无关登录态。项目只接受 `format: "local-cookie-manager-v1"`，只导入 `douyin.com` 及其子域 cookie，不导入 redacted 文件、过期 cookie 或分区 cookie。
+如果你使用 [Local Cookie Manager](https://github.com/exordor/sunbeam-cookie-jar) 导出了抖音 cookie，可以把无损 JSON 用作平台无关登录态。项目只接受 `format: "local-cookie-manager-v1"`，默认只导入对当前目标站点生效的 cookie，例如 `.douyin.com` 和 `www.douyin.com`；`creator.douyin.com`、`live.douyin.com` 这类无关子域 cookie 会被跳过。不导入 redacted 文件、过期 cookie 或分区 cookie。
 
 CLI 示例：
 
@@ -106,6 +106,8 @@ DOUYIN_COOKIE_FILE=./cookies-douyin.com.json npm run monitor
 ```
 
 Dashboard 也可以在“采集控制”面板上传 cookie-manager 无损 JSON。文件会保存到本机 `data/auth/douyin-cookies.json`，权限设置为 `0600`，并且 `data/` 默认不会入库。上传和状态 API 不返回 cookie 名称或值，只返回导入数量摘要。
+
+Cookie 注入不会主动刷新已打开的抖音页面；新 profile 或空白页会在首次导航前注入 cookie，避免因为页面刷新增加验证码触发概率。
 
 ## 取关判断
 

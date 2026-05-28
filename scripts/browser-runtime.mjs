@@ -264,9 +264,6 @@ class PlaywrightRuntime {
     if (!/douyin\.com/.test(this.page.url())) {
       await this.page.goto(target, { waitUntil: 'domcontentloaded', timeout: 90_000 });
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-    } else if (this.cookieAuthSummary?.configured && this.cookieAuthSummary.acceptedCount > 0) {
-      await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 90_000 }).catch(() => {});
-      await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
     await this.page.bringToFront().catch(() => {});
     return /douyin\.com/.test(this.page.url()) ? 'found' : 'opened';
@@ -337,9 +334,6 @@ class CdpRuntime {
     this.page = pages.find((page) => /douyin\.com/.test(page.url())) || pages[0] || (await this.context.newPage());
     if (!/douyin\.com/.test(this.page.url())) {
       await this.page.goto(target, { waitUntil: 'domcontentloaded', timeout: 90_000 });
-      await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-    } else if (this.cookieAuthSummary?.configured && this.cookieAuthSummary.acceptedCount > 0) {
-      await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 90_000 }).catch(() => {});
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
     await this.page.bringToFront().catch(() => {});

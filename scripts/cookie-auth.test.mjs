@@ -15,7 +15,7 @@ const baseExport = {
     url: 'https://www.douyin.com/user/self'
   },
   redacted: false,
-  cookieCount: 6,
+  cookieCount: 7,
   cookies: [
     {
       name: 'sessionid',
@@ -51,6 +51,18 @@ const baseExport = {
       secure: true,
       httpOnly: false,
       sameSite: 'strict',
+      session: true,
+      storeId: '0'
+    },
+    {
+      name: 'creator_only',
+      value: 'value',
+      domain: 'creator.douyin.com',
+      hostOnly: true,
+      path: '/',
+      secure: true,
+      httpOnly: true,
+      sameSite: 'unspecified',
       session: true,
       storeId: '0'
     },
@@ -98,12 +110,13 @@ const baseExport = {
 const parsed = parseCookieAuthContent(JSON.stringify(baseExport), {
   now: new Date('2026-05-29T00:00:00.000Z')
 });
-assert.equal(parsed.cookieCount, 6);
+assert.equal(parsed.cookieCount, 7);
 assert.equal(parsed.acceptedCount, 3);
-assert.equal(parsed.skippedCount, 3);
+assert.equal(parsed.skippedCount, 4);
 assert.deepEqual(parsed.skippedReasons, [
   { reason: 'expired', count: 1 },
   { reason: 'non-douyin-domain', count: 1 },
+  { reason: 'non-target-douyin-subdomain', count: 1 },
   { reason: 'partition-key-unsupported', count: 1 }
 ]);
 assert.deepEqual(parsed.cookies[0], {
