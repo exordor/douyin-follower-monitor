@@ -317,7 +317,7 @@ function App() {
         {!data.summary.hasDatabase && (
           <section className="notice warning">
             <AlertTriangle size={18} />
-            <span>尚未找到 SQLite 基线。先运行 <code>npm run monitor:doubao</code> 生成本地数据。</span>
+            <span>尚未找到 SQLite 基线。先运行 <code>npm run monitor</code> 生成本地数据。</span>
           </section>
         )}
 
@@ -528,6 +528,7 @@ function ScanControlPanel({
 
       <div className="scan-grid">
         <div><span>状态</span><strong>{hasStatus ? <StatusPill value={status!.status} /> : '-'}</strong></div>
+        <div><span>Runtime</span><strong>{status?.runtimeLabel || status?.runtime || '-'}</strong></div>
         <div><span>模式</span><strong>{MODE_LABELS[status?.mode || 'monitor'] || status?.mode || '自动'}</strong></div>
         <div><span>原因</span><strong>{status?.reason || '-'}</strong></div>
         <div><span>页面</span><strong>{formatNumber(status?.pagesFetched || 0)}</strong></div>

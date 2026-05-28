@@ -1,18 +1,12 @@
-import { spawn as defaultSpawn, execFile } from 'node:child_process';
+import { spawn as defaultSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
-import { promisify } from 'node:util';
 
-const execFileAsync = promisify(execFile);
-const DEFAULT_BROWSER_APP = 'com.bot.pc.doubao.browser';
+import { resolveBrowserRuntimeConfig } from './browser-runtime.mjs';
+
 const MAX_LOG_LINES = 120;
-const DOUYIN_SELF_URL = 'https://www.douyin.com/user/self';
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function nowId(date = new Date()) {
   return date.toISOString().replaceAll(':', '-').replaceAll('.', '-');
@@ -36,6 +30,8 @@ function publicJob(job) {
       count: 0,
       profileFollowerCount: null,
       hiddenOrUnavailableCount: null,
+      runtime: 'auto',
+      runtimeLabel: '',
       exitCode: null,
       signal: null,
       error: '',
@@ -57,6 +53,8 @@ function publicJob(job) {
     count: job.count,
     profileFollowerCount: job.profileFollowerCount,
     hiddenOrUnavailableCount: job.hiddenOrUnavailableCount,
+    runtime: job.runtime,
+    runtimeLabel: job.runtimeLabel,
     exitCode: job.exitCode,
     signal: job.signal,
     error: job.error,
@@ -79,6 +77,13 @@ function parseLogLine(job, line) {
   if (modeMatch) {
     job.mode = modeMatch[1];
     job.reason = modeMatch[2] || '';
+    return;
+  }
+
+  const runtimeMatch = line.match(/^Runtime:\s*(.+)\s+\(([^)]+)\)/);
+  if (runtimeMatch) {
+    job.runtimeLabel = runtimeMatch[1];
+    job.runtime = runtimeMatch[2];
     return;
   }
 
@@ -149,6 +154,8 @@ function partialSummaryFromSnapshot(partial) {
     mode: partial.mode || '',
     requestedMode: partial.requestedMode || '',
     reason: partial.reason || '',
+    runtime: partial.runtime || '',
+    runtimeLabel: partial.runtimeLabel || '',
     pagesFetched: partial.pagesFetched || 0,
     count: partial.count || 0,
     scanComplete: partial.scanComplete ?? null,
@@ -171,61 +178,28 @@ function mergePartialIntoStatus(status, partialSummary) {
     status.profileFollowerCount = status.profileFollowerCount ?? partialSummary.profileFollowerCount;
     if (partialSummary.reason && !status.reason) status.reason = partialSummary.reason;
     if (partialSummary.mode && (!status.mode || status.mode === 'monitor')) status.mode = partialSummary.mode;
+    if (partialSummary.runtime) status.runtime = partialSummary.runtime;
+    if (partialSummary.runtimeLabel) status.runtimeLabel = partialSummary.runtimeLabel;
   }
-}
-
-function appleScriptTarget(app) {
-  if (/^[A-Za-z0-9_.-]+$/.test(app) && app.includes('.')) return `id "${app}"`;
-  return `"${String(app).replaceAll('"', '\\"')}"`;
-}
-
-async function focusDouyinTab(browserApp = DEFAULT_BROWSER_APP) {
-  const script = `
-tell application ${appleScriptTarget(browserApp)}
-  activate
-  set foundTab to false
-  repeat with w in windows
-    set tabIndex to 1
-    repeat with t in tabs of w
-      try
-        if (URL of t contains "douyin.com") then
-          set active tab index of w to tabIndex
-          set index of w to 1
-          set foundTab to true
-          exit repeat
-        end if
-      end try
-      set tabIndex to tabIndex + 1
-    end repeat
-    if foundTab then exit repeat
-  end repeat
-  if foundTab then return "found"
-  if (count windows) is 0 then make new window
-  set targetWindow to front window
-  make new tab at end of tabs of targetWindow with properties {URL:"${DOUYIN_SELF_URL}"}
-  set active tab index of targetWindow to (count tabs of targetWindow)
-  set index of targetWindow to 1
-  return "opened"
-end tell`;
-
-  const { stdout } = await execFileAsync('osascript', ['-e', script], { timeout: 10_000 });
-  return stdout.trim();
 }
 
 function createScanJobManager({
   rootDir,
   db,
   outDir,
-  browserApp = DEFAULT_BROWSER_APP,
+  runtime = process.env.DOUYIN_RUNTIME || 'auto',
+  profile,
+  cdpUrl = process.env.DOUYIN_CDP_URL || '',
+  browserApp = process.env.DOUYIN_BROWSER_APP || '',
   collectorPath = path.join(rootDir, 'scripts', 'collect-followers.mjs'),
   nodePath = process.execPath,
-  spawnImpl = defaultSpawn,
-  focusBrowser = true
+  spawnImpl = defaultSpawn
 }) {
   const emitter = new EventEmitter();
   const clients = new Set();
   let currentJob = null;
   let lastJob = null;
+  const runtimeConfig = resolveBrowserRuntimeConfig({ runtime, profile, cdpUrl, browserApp });
 
   function isActive(job) {
     return job && ['starting', 'running', 'stopping'].includes(job.status);
@@ -244,14 +218,18 @@ function createScanJobManager({
     }
   }
 
-async function enrichStatus(status) {
-  const partial = await readJsonIfExists(path.join(outDir, 'in-progress', 'latest.partial.json'));
-  if (partial) {
-    const partialSummary = partialSummaryFromSnapshot(partial);
-    if (partialMatchesJob(partialSummary, status.startedAt, status.status)) mergePartialIntoStatus(status, partialSummary);
+  async function enrichStatus(status) {
+    const partial = await readJsonIfExists(path.join(outDir, 'in-progress', 'latest.partial.json'));
+    if (partial) {
+      const partialSummary = partialSummaryFromSnapshot(partial);
+      if (partialMatchesJob(partialSummary, status.startedAt, status.status)) mergePartialIntoStatus(status, partialSummary);
+    }
+    if (status.status === 'idle') {
+      status.runtime = runtimeConfig.runtime;
+      status.runtimeLabel = runtimeConfig.runtimeLabel;
+    }
+    return status;
   }
-  return status;
-}
 
   async function status() {
     return enrichStatus(publicJob(currentJob || lastJob));
@@ -274,6 +252,8 @@ async function enrichStatus(status) {
       count: 0,
       profileFollowerCount: null,
       hiddenOrUnavailableCount: null,
+      runtime: runtimeConfig.runtime,
+      runtimeLabel: runtimeConfig.runtimeLabel,
       exitCode: null,
       signal: null,
       error: '',
@@ -288,24 +268,11 @@ async function enrichStatus(status) {
     lastJob = job;
     emitStatus();
 
-    try {
-      if (focusBrowser) {
-        const focusResult = await focusDouyinTab(browserApp);
-        if (focusResult === 'found') appendLog(job, '已切换到豆包浏览器中的抖音标签页。');
-        else if (focusResult === 'opened') {
-          appendLog(job, '未找到已打开的抖音标签页，已打开抖音个人页。');
-          await sleep(4500);
-        } else appendLog(job, '未找到已打开的抖音标签页，采集脚本将检查当前活动标签页。');
-      }
-    } catch (error) {
-      appendLog(job, `切换抖音标签页失败: ${error.message}`);
-    }
-
     const args = [
       '--disable-warning=ExperimentalWarning',
       collectorPath,
-      '--browser-app',
-      browserApp,
+      '--runtime',
+      runtimeConfig.runtime,
       '--api',
       '--mode',
       'monitor',
@@ -314,6 +281,9 @@ async function enrichStatus(status) {
       '--out-dir',
       outDir
     ];
+    if (runtimeConfig.profile) args.push('--profile', runtimeConfig.profile);
+    if (runtimeConfig.cdpUrl) args.push('--cdp-url', runtimeConfig.cdpUrl);
+    if (runtimeConfig.browserApp) args.push('--browser-app', runtimeConfig.browserApp);
 
     const child = spawnImpl(nodePath, args, {
       cwd: rootDir,
@@ -358,6 +328,8 @@ async function enrichStatus(status) {
         job.hiddenOrUnavailableCount = latestSnapshot.hiddenOrUnavailableCount ?? job.hiddenOrUnavailableCount;
         job.mode = latestSnapshot.mode || job.mode;
         job.reason = latestSnapshot.reason || job.reason;
+        job.runtime = latestSnapshot.runtime || job.runtime;
+        job.runtimeLabel = latestSnapshot.runtimeLabel || job.runtimeLabel;
       }
 
       const latestChange = await readJsonIfExists(path.join(outDir, 'latest-change.json'));
@@ -432,4 +404,4 @@ async function enrichStatus(status) {
   };
 }
 
-export { createScanJobManager, focusDouyinTab, parseLogLine };
+export { createScanJobManager, parseLogLine };

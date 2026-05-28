@@ -43,7 +43,10 @@ function parseArgs(argv) {
     port: Number(process.env.PORT || 4573),
     host: '127.0.0.1',
     staticDir: DEFAULT_STATIC_DIR,
-    browserApp: DEFAULT_BROWSER_APP
+    runtime: process.env.DOUYIN_RUNTIME || 'auto',
+    profile: process.env.DOUYIN_PROFILE || path.join(ROOT_DIR, '.douyin-browser'),
+    cdpUrl: process.env.DOUYIN_CDP_URL || '',
+    browserApp: process.env.DOUYIN_BROWSER_APP || ''
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -53,6 +56,9 @@ function parseArgs(argv) {
     else if (arg === '--port') options.port = Number.parseInt(argv[++index], 10);
     else if (arg === '--host') options.host = argv[++index];
     else if (arg === '--static-dir') options.staticDir = path.resolve(argv[++index]);
+    else if (arg === '--runtime') options.runtime = argv[++index];
+    else if (arg === '--profile') options.profile = path.resolve(argv[++index]);
+    else if (arg === '--cdp-url') options.cdpUrl = argv[++index];
     else if (arg === '--browser-app') options.browserApp = argv[++index];
     else if (arg === '--help' || arg === '-h') options.help = true;
   }
@@ -69,7 +75,10 @@ Options:
   --port <number>      HTTP port (default: 4573)
   --host <host>        Bind host (default: 127.0.0.1)
   --static-dir <path>  Built dashboard directory (default: web/dist)
-  --browser-app <id>   Browser bundle id used for collection (default: ${DEFAULT_BROWSER_APP})
+  --runtime <runtime>  Browser runtime: auto, playwright, cdp, apple-events (default: auto)
+  --profile <path>     Playwright profile path (default: .douyin-browser)
+  --cdp-url <url>      Chrome DevTools Protocol endpoint
+  --browser-app <id>   Browser bundle id used by apple-events runtime, e.g. ${DEFAULT_BROWSER_APP}
 `);
 }
 
@@ -227,12 +236,18 @@ function createDashboardServer(options = {}) {
     port: options.port || 4573,
     host: options.host || '127.0.0.1',
     staticDir: options.staticDir || DEFAULT_STATIC_DIR,
-    browserApp: options.browserApp || DEFAULT_BROWSER_APP
+    runtime: options.runtime || 'auto',
+    profile: options.profile || path.join(ROOT_DIR, '.douyin-browser'),
+    cdpUrl: options.cdpUrl || '',
+    browserApp: options.browserApp || ''
   };
   const scanManager = options.scanManager || createScanJobManager({
     rootDir: ROOT_DIR,
     db: resolvedOptions.db,
     outDir: resolvedOptions.outDir,
+    runtime: resolvedOptions.runtime,
+    profile: resolvedOptions.profile,
+    cdpUrl: resolvedOptions.cdpUrl,
     browserApp: resolvedOptions.browserApp
   });
 

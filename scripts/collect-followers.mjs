@@ -1,15 +1,12 @@
 #!/usr/bin/env node
 
-import { execFile } from 'node:child_process';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import readline from 'node:readline/promises';
-import { promisify } from 'node:util';
 
-const execFileAsync = promisify(execFile);
+import { createBrowserRuntime, resolveBrowserRuntimeConfig } from './browser-runtime.mjs';
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_TARGET = 'https://www.douyin.com/user/self';
@@ -17,8 +14,10 @@ const DEFAULT_TARGET = 'https://www.douyin.com/user/self';
 function parseArgs(argv) {
   const options = {
     target: DEFAULT_TARGET,
-    profile: path.join(ROOT_DIR, '.douyin-browser'),
-    browserApp: '',
+    profile: process.env.DOUYIN_PROFILE ? path.resolve(ROOT_DIR, process.env.DOUYIN_PROFILE) : path.join(ROOT_DIR, '.douyin-browser'),
+    runtime: process.env.DOUYIN_RUNTIME || 'auto',
+    cdpUrl: process.env.DOUYIN_CDP_URL || '',
+    browserApp: process.env.DOUYIN_BROWSER_APP || '',
     outDir: path.join(ROOT_DIR, 'data'),
     headless: false,
     manual: false,
@@ -53,6 +52,8 @@ function parseArgs(argv) {
 
     if (arg === '--target') options.target = next();
     else if (arg === '--profile') options.profile = path.resolve(ROOT_DIR, next());
+    else if (arg === '--runtime') options.runtime = next();
+    else if (arg === '--cdp-url') options.cdpUrl = next();
     else if (arg === '--browser-app') options.browserApp = next();
     else if (arg === '--out-dir') options.outDir = path.resolve(ROOT_DIR, next());
     else if (arg === '--mode') options.mode = next();
@@ -114,7 +115,9 @@ function printHelp() {
 
 Options:
   --target <url>         Douyin profile URL (default: ${DEFAULT_TARGET})
+  --runtime <runtime>    Browser runtime: auto, playwright, cdp, apple-events (default: auto)
   --profile <path>       Browser profile directory (default: .douyin-browser)
+  --cdp-url <url>        Chrome DevTools Protocol endpoint, e.g. http://127.0.0.1:9222
   --browser-app <app>    Use the active tab of an existing browser app/bundle id
   --out-dir <path>       Output directory (default: data)
   --api                  Use Douyin's in-page follower API instead of DOM scrolling
@@ -598,62 +601,10 @@ function extractProfileStatsInPage() {
   };
 }
 
-function appleScriptTarget(app) {
-  if (/^[A-Za-z0-9_.-]+$/.test(app) && app.includes('.')) {
-    return `id "${app}"`;
-  }
-  return `"${app.replaceAll('"', '\\"')}"`;
-}
-
-async function runBrowserJavascript(app, javascript) {
-  const jsPath = path.join(os.tmpdir(), `douyin-follower-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.js`);
-  await writeFile(jsPath, javascript, 'utf8');
-
-  const appleScript = [
-    `set jsCode to read POSIX file "${jsPath.replaceAll('"', '\\"')}" as «class utf8»`,
-    `tell application ${appleScriptTarget(app)} to execute active tab of front window javascript jsCode`
-  ].join('\n');
-
-  try {
-    const { stdout } = await execFileAsync('osascript', ['-e', appleScript], {
-      maxBuffer: 64 * 1024 * 1024
-    });
-    return stdout.trim();
-  } catch (error) {
-    const message = `${error.stdout || ''}${error.stderr || ''}${error.message || ''}`;
-    if (/Apple 事件中的 JavaScript|Apple events|JavaScript/.test(message) && /关闭|disabled/i.test(message)) {
-      throw new Error([
-        `浏览器拒绝执行页面 JavaScript: ${app}`,
-        '请在豆包浏览器菜单开启: 显示 > 开发者 > 允许 Apple 事件中的 JavaScript',
-        '开启后重新运行: npm run collect:doubao'
-      ].join('\n'));
-    }
-    throw error;
-  } finally {
-    await unlink(jsPath).catch(() => {});
-  }
-}
-
-async function runBrowserJson(app, expression) {
-  const output = await runBrowserJavascript(app, `(() => {
-    try {
-      return JSON.stringify(${expression});
-    } catch (error) {
-      return JSON.stringify({ ok: false, error: String(error && (error.stack || error.message) || error) });
-    }
-  })()`);
-
-  try {
-    return JSON.parse(output);
-  } catch {
-    return { ok: false, error: `Browser returned non-JSON output: ${output.slice(0, 300)}` };
-  }
-}
-
 async function ensureFollowerPanelInBrowserApp(options) {
   await ensureDouyinPageInBrowserApp(options);
 
-  const opened = await runBrowserJson(options.browserApp, `(() => {
+  const opened = await options.browserRuntime.evaluateJson(`(() => {
     const visible = (element) => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -685,7 +636,7 @@ async function ensureFollowerPanelInBrowserApp(options) {
   if (!opened.ok) throw new Error(opened.error);
   await sleep(1800);
 
-  const selected = await runBrowserJson(options.browserApp, `(() => {
+  const selected = await options.browserRuntime.evaluateJson(`(() => {
     const tabs = [...document.querySelectorAll('[role="tab"], button, div, span')]
       .filter((element) => /粉丝/.test((element.innerText || element.textContent || '').trim()));
     const selectedTab = tabs.find((element) => element.getAttribute('aria-selected') === 'true' || /selected|active/i.test(element.className || ''));
@@ -694,17 +645,12 @@ async function ensureFollowerPanelInBrowserApp(options) {
   })()`);
 
   if (!selected.ok) throw new Error(selected.error);
-  await runBrowserJson(options.browserApp, `(${resetBestFollowerScrollContainer.toString()})()`);
+  await options.browserRuntime.evaluateJson(`(${resetBestFollowerScrollContainer.toString()})()`);
   await sleep(1200);
 }
 
 async function ensureDouyinPageInBrowserApp(options) {
-  const pageInfo = await runBrowserJson(options.browserApp, `({
-    ok: true,
-    url: location.href,
-    title: document.title,
-    text: (document.body && document.body.innerText || '').slice(0, 500)
-  })`);
+  const pageInfo = await options.browserRuntime.readPageInfo();
 
   if (!pageInfo.ok) throw new Error(pageInfo.error);
   if (!/douyin\.com/.test(pageInfo.url)) {
@@ -716,50 +662,13 @@ async function ensureDouyinPageInBrowserApp(options) {
 async function readBrowserProfileStats(options) {
   let lastStats = null;
   for (let attempt = 1; attempt <= 8; attempt += 1) {
-    const stats = await runBrowserJson(options.browserApp, `(${extractProfileStatsInPage.toString()})()`);
+    const stats = await options.browserRuntime.evaluateJson(`(${extractProfileStatsInPage.toString()})()`);
     if (stats?.ok === false) throw new Error(stats.error);
     lastStats = stats;
     if (!profileStatsEmpty(stats)) return stats;
     await sleep(500);
   }
   return lastStats;
-}
-
-async function runBrowserMainWorldJson(app, expression, { timeoutMs = 30_000, pollMs = 250 } = {}) {
-  const key = `data-douyin-main-world-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const mainCode = `(() => {
-    const finish = (value) => document.documentElement.setAttribute(${JSON.stringify(key)}, JSON.stringify(value));
-    try {
-      Promise.resolve(${expression})
-        .then((value) => finish({ ok: true, value }))
-        .catch((error) => finish({ ok: false, error: String(error && (error.stack || error.message) || error) }));
-    } catch (error) {
-      finish({ ok: false, error: String(error && (error.stack || error.message) || error) });
-    }
-  })()`;
-
-  await runBrowserJavascript(app, `(() => {
-    document.documentElement.removeAttribute(${JSON.stringify(key)});
-    const script = document.createElement('script');
-    script.textContent = ${JSON.stringify(mainCode)};
-    (document.head || document.documentElement).appendChild(script);
-    script.remove();
-    return true;
-  })()`);
-
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const output = await runBrowserJavascript(app, `document.documentElement.getAttribute(${JSON.stringify(key)}) || ''`);
-    if (output) {
-      await runBrowserJavascript(app, `document.documentElement.removeAttribute(${JSON.stringify(key)})`).catch(() => {});
-      const parsed = JSON.parse(output);
-      if (!parsed.ok) throw new Error(parsed.error);
-      return parsed.value;
-    }
-    await sleep(pollMs);
-  }
-
-  throw new Error(`页面主环境执行超时: ${timeoutMs}ms`);
 }
 
 function extractSelfUserIdentityInPage() {
@@ -787,10 +696,10 @@ function extractSelfUserIdentityInPage() {
 }
 
 async function readBrowserSelfIdentity(options) {
-  const identity = await runBrowserJson(options.browserApp, `(${extractSelfUserIdentityInPage.toString()})()`);
+  const identity = await options.browserRuntime.evaluateJson(`(${extractSelfUserIdentityInPage.toString()})()`);
   if (identity?.ok === false) throw new Error(identity.error);
   if (!identity?.userId || !identity?.secUserId) {
-    throw new Error('无法从当前抖音页面读取登录用户 uid/secUid，请确认活动标签页是自己的抖音主页。');
+    throw new Error('无法从当前抖音页面读取登录用户 uid/secUid。请确认该 runtime/profile 已登录抖音，并且活动标签页是自己的抖音主页。');
   }
   return identity;
 }
@@ -823,7 +732,7 @@ async function callFollowerApiPage(options, identity, cursorMaxTime) {
     address_book_access: 0
   };
 
-  return runBrowserMainWorldJson(options.browserApp, `(() => {
+  return options.browserRuntime.evaluateMainWorldJson(`(() => {
     if (!window.webpackChunkdouyin_web) throw new Error('Douyin webpack runtime is not available on this page');
     window.webpackChunkdouyin_web.push([[Math.floor(Math.random() * 1e9)], {}, function(req) {
       window.__douyin_follower_require__ = req;
@@ -965,7 +874,7 @@ async function collectFollowersFromBrowserApp(options) {
   let idleRounds = 0;
 
   for (let round = 1; round <= options.maxRounds; round += 1) {
-    const result = await runBrowserJson(options.browserApp, `(() => {
+    const result = await options.browserRuntime.evaluateJson(`(() => {
       const extracted = (${extractFollowersInPage.toString()})();
       const scrolled = extracted.noMore ? false : (${scrollBestFollowerContainer.toString()})();
       return { ok: true, ...extracted, scrolled };
@@ -1531,6 +1440,8 @@ async function persistProgress(options, followers, metadata = {}) {
     collectedAt,
     runStartedAt,
     target: options.target,
+    runtime: options.runtime || '',
+    runtimeLabel: options.runtimeLabel || '',
     mode: options.effectiveMode || options.mode,
     requestedMode: options.mode,
     reason: options.modeReason || '',
@@ -1575,6 +1486,8 @@ async function persistResult(options, followers) {
   const snapshot = {
     collectedAt,
     target: options.target,
+    runtime: options.runtime || '',
+    runtimeLabel: options.runtimeLabel || '',
     mode: options.effectiveMode || options.mode,
     requestedMode: options.mode,
     reason: options.modeReason || '',
@@ -1597,6 +1510,8 @@ async function persistResult(options, followers) {
       previousCollectedAt: previousSnapshot?.collectedAt || null,
       mode: options.monitorChange.mode,
       requestedMode: options.mode,
+      runtime: options.runtime || '',
+      runtimeLabel: options.runtimeLabel || '',
       reason: options.monitorChange.reason || options.modeReason || '',
       scanComplete: options.scanComplete ?? null,
       currentCount: options.monitorChange.currentCount,
@@ -1626,6 +1541,8 @@ async function persistResult(options, followers) {
       previousCollectedAt: previousSnapshot?.collectedAt || null,
       mode: options.effectiveMode || options.mode,
       requestedMode: options.mode,
+      runtime: options.runtime || '',
+      runtimeLabel: options.runtimeLabel || '',
       reason: options.modeReason || '',
       scanComplete: options.scanComplete ?? null,
       currentCount: followers.length,
@@ -1694,6 +1611,46 @@ function profileStatsEmpty(profileStats) {
   return !profileStats || (!profileStats.following && !profileStats.followers && !profileStats.likes);
 }
 
+function pageLooksLoggedOut(pageInfo) {
+  return /扫码登录|验证码登录|密码登录|登录后可/.test(pageInfo?.text || '');
+}
+
+function shouldUseBrowserRuntime(options) {
+  return Boolean(
+    options.api ||
+    options.browserApp ||
+    options.cdpUrl ||
+    options.runtime !== 'auto' ||
+    process.env.DOUYIN_RUNTIME ||
+    process.env.DOUYIN_CDP_URL ||
+    process.env.DOUYIN_BROWSER_APP
+  );
+}
+
+async function prepareBrowserRuntime(options) {
+  const runtimeConfig = resolveBrowserRuntimeConfig(options);
+  options.runtime = runtimeConfig.runtime;
+  options.requestedRuntime = runtimeConfig.requestedRuntime;
+  options.runtimeLabel = runtimeConfig.runtimeLabel;
+  options.browserApp = runtimeConfig.browserApp;
+  options.cdpUrl = runtimeConfig.cdpUrl;
+  options.profile = runtimeConfig.profile || options.profile;
+  options.browserRuntime = await createBrowserRuntime(options);
+
+  console.log(`Runtime: ${options.runtimeLabel} (${options.runtime})`);
+  const openResult = await options.browserRuntime.openOrFocusTarget(options.target);
+  if (openResult === 'found') console.log('已切换到可用的抖音页面。');
+  else if (openResult === 'opened') console.log('已打开抖音个人页。');
+
+  const pageInfo = await options.browserRuntime.readPageInfo();
+  if (pageLooksLoggedOut(pageInfo)) {
+    if (!process.stdin.isTTY) {
+      throw new Error('浏览器页面看起来尚未登录。请先用同一 runtime/profile 登录抖音后再从 dashboard 或后台任务启动采集。');
+    }
+    await promptEnter('浏览器里看起来还未登录。请完成登录，并确认打开的是你的个人主页。');
+  }
+}
+
 async function readPageProfileStats(page) {
   let lastStats = null;
   for (let attempt = 1; attempt <= 8; attempt += 1) {
@@ -1754,15 +1711,16 @@ async function main() {
   ensureRunMeta(options);
   installSignalCheckpointHandler(options);
 
-  if (options.browserApp) {
-    options.profileStats = await readBrowserProfileStats(options).catch((error) => {
-      console.warn(`读取主页计数失败: ${error.message}`);
-      return null;
-    });
-
+  if (shouldUseBrowserRuntime(options)) {
     let followers;
     let db = null;
     try {
+      await prepareBrowserRuntime(options);
+      options.profileStats = await readBrowserProfileStats(options).catch((error) => {
+        console.warn(`读取主页计数失败: ${error.message}`);
+        return null;
+      });
+
       if (options.api) {
         db = await openMonitorDatabase(options.db);
         options.monitorDb = db;
@@ -1811,6 +1769,7 @@ async function main() {
     } finally {
       options.monitorDb = null;
       closeMonitorDatabase(db);
+      await options.browserRuntime?.close().catch(() => {});
     }
 
     if (!followers.length) {

@@ -38,7 +38,7 @@ function pathFrom(points: readonly (readonly [number, number])[]) {
 
 export function TrendChart({ data }: { data: TimelinePoint[] }) {
   if (!data.length) {
-    return <div className="empty-chart">暂无扫描记录，先运行 npm run monitor:doubao</div>;
+    return <div className="empty-chart">暂无扫描记录，先运行 npm run monitor</div>;
   }
 
   const width = 760;

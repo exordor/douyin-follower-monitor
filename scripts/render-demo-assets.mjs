@@ -205,7 +205,7 @@ async function renderMarketingAssets() {
     await screenshotHtml(browser, socialHtml(), path.join(PUBLIC_DIR, 'social-preview.png'), { width: 1280, height: 640 });
 
     const lines = [
-      '<b>$</b> npm run monitor:doubao',
+      '<b>$</b> npm run monitor',
       '扫描模式: <b>recent</b> (recent-window)',
       'API 第 1 页: 本页 20，累计 20，hasMore=true',
       'API 第 5 页: 本页 20，累计 100，hasMore=true',

@@ -13,10 +13,12 @@ import { createDashboardServer } from './serve-dashboard.mjs';
 
 function createFakeSpawn() {
   const children = [];
-  const spawnImpl = () => {
+  const spawnImpl = (command, args) => {
     const child = new EventEmitter();
     child.stdout = new PassThrough();
     child.stderr = new PassThrough();
+    child.command = command;
+    child.args = args;
     child.killSignal = null;
     child.kill = (signal) => {
       child.killSignal = signal;
@@ -25,6 +27,7 @@ function createFakeSpawn() {
     };
     children.push(child);
     setTimeout(() => {
+      child.stdout.write('Runtime: Chrome DevTools Protocol (cdp)\n');
       child.stdout.write('扫描模式: full (profile-followers-decreased)\n');
       child.stdout.write('API 第 1 页: 本页 20，累计 20，hasMore=true\n');
       child.stdout.write('已保存进度: 20 -> /tmp/latest.partial.json\n');
@@ -143,8 +146,9 @@ const manager = createScanJobManager({
   rootDir: process.cwd(),
   db: path.join(dir, 'followers.db'),
   outDir: dir,
-  spawnImpl,
-  focusBrowser: false
+  runtime: 'cdp',
+  cdpUrl: 'http://127.0.0.1:9222',
+  spawnImpl
 });
 
 const port = await getFreePort();
@@ -187,6 +191,8 @@ try {
     const current = await manager.status();
     return current.count >= 20 ? current : null;
   });
+  assert.equal(parsed.runtime, 'cdp');
+  assert.equal(parsed.runtimeLabel, 'Chrome DevTools Protocol');
   assert.equal(parsed.mode, 'full');
   assert.equal(parsed.reason, 'profile-followers-decreased');
   assert.equal(parsed.pagesFetched, 1);
@@ -204,6 +210,17 @@ try {
   });
   assert.equal(finalStatus.signal, 'SIGTERM');
   assert.equal(children[0].killSignal, 'SIGTERM');
+  assert.deepEqual(children[0].args.slice(0, 8), [
+    '--disable-warning=ExperimentalWarning',
+    path.join(process.cwd(), 'scripts', 'collect-followers.mjs'),
+    '--runtime',
+    'cdp',
+    '--api',
+    '--mode',
+    'monitor',
+    '--db'
+  ]);
+  assert.equal(children[0].args.includes('--cdp-url'), true);
 } finally {
   await close(server);
   await rm(dir, { recursive: true, force: true });

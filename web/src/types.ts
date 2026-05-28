@@ -108,6 +108,8 @@ export interface ScanJobPartial {
   mode: string;
   requestedMode: string;
   reason: string;
+  runtime: string;
+  runtimeLabel: string;
   pagesFetched: number;
   count: number;
   scanComplete: boolean | null;
@@ -135,6 +137,8 @@ export interface ScanJobStatus {
   count: number;
   profileFollowerCount: number | null;
   hiddenOrUnavailableCount: number | null;
+  runtime: string;
+  runtimeLabel: string;
   exitCode: number | null;
   signal: string | null;
   error: string;

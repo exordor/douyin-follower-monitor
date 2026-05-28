@@ -17,7 +17,7 @@
 
 ```bash
 npm install
-npm run monitor:doubao
+npm run monitor
 npm run dashboard
 ```
 
@@ -48,7 +48,7 @@ http://127.0.0.1:4573
 API 模式不会滚动 DOM，而是在当前抖音页面主执行环境里调用页面已加载的粉丝分页接口。它复用你的浏览器登录态和页面已有请求逻辑，通常比滚动粉丝弹窗快得多。
 
 ```bash
-npm run monitor:doubao
+npm run monitor
 ```
 
 常用脚本：
@@ -56,8 +56,36 @@ npm run monitor:doubao
 ```bash
 npm run scan:recent
 npm run scan:full
+npm run monitor:doubao
 npm run collect:doubao:api
 npm run dashboard:dev
+```
+
+## Browser Runtime
+
+采集层通过 runtime adapter 连接已经登录的浏览器。默认 `auto` 规则是：传入 `--browser-app` 时使用 Apple Events；传入 `--cdp-url` 或 `DOUYIN_CDP_URL` 时使用 CDP；否则使用 Playwright 持久 profile。
+
+| Runtime | 适用场景 | 示例 |
+| --- | --- | --- |
+| `playwright` | 跨平台默认入口，使用 `.douyin-browser` 持久 profile，首次运行需要登录 | `npm run monitor` |
+| `cdp` | 连接已开启 remote debugging 的 Chrome/Edge/Chromium | `DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor` |
+| `apple-events` | macOS 复用已登录豆包/Chrome 类浏览器标签页 | `npm run monitor:doubao` |
+
+CDP 示例：
+
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/douyin-cdp-profile
+
+DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor
+```
+
+豆包浏览器快捷入口：
+
+```bash
+npm run monitor:doubao
+npm run dashboard:doubao
 ```
 
 ## 取关判断
@@ -93,7 +121,7 @@ npm run dashboard
 npm run dashboard:dev
 ```
 
-只读 API：
+本地 API：
 
 - `GET /api/summary`
 - `GET /api/timeline?days=30`
@@ -103,6 +131,10 @@ npm run dashboard:dev
 - `GET /api/runs?limit=100`
 - `GET /api/export/latest.json`
 - `GET /api/export/latest.csv`
+- `GET /api/scan/status`
+- `GET /api/scan/events`
+- `POST /api/scan/start`
+- `POST /api/scan/stop`
 
 自定义路径：
 
@@ -110,7 +142,8 @@ npm run dashboard:dev
 node --disable-warning=ExperimentalWarning scripts/serve-dashboard.mjs \
   --db data/followers.db \
   --out-dir data \
-  --port 4573
+  --port 4573 \
+  --runtime playwright
 ```
 
 ## 输出文件

@@ -115,6 +115,8 @@ export async function loadScanStatus(): Promise<ScanJobStatus> {
       count: 0,
       profileFollowerCount: null,
       hiddenOrUnavailableCount: null,
+      runtime: 'demo',
+      runtimeLabel: 'Demo data',
       exitCode: null,
       signal: null,
       error: '',

@@ -23,21 +23,25 @@
   "type": "module",
   "scripts": {
     "collect": "node scripts/collect-followers.mjs",
-    "collect:doubao": "node scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser",
-    "collect:doubao:api": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser --api --mode full",
-    "monitor:doubao": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser --api --mode monitor",
-    "scan:recent": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser --api --mode recent",
-    "scan:full": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser --api --mode full",
+    "collect:doubao": "node scripts/collect-followers.mjs --runtime apple-events --browser-app com.bot.pc.doubao.browser",
+    "collect:doubao:api": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --runtime apple-events --browser-app com.bot.pc.doubao.browser --api --mode full",
+    "monitor": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --api --mode monitor",
+    "monitor:doubao": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --runtime apple-events --browser-app com.bot.pc.doubao.browser --api --mode monitor",
+    "scan:recent": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --api --mode recent",
+    "scan:full": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --api --mode full",
+    "scan:recent:doubao": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --runtime apple-events --browser-app com.bot.pc.doubao.browser --api --mode recent",
+    "scan:full:doubao": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --runtime apple-events --browser-app com.bot.pc.doubao.browser --api --mode full",
     "collect:manual": "node scripts/collect-followers.mjs --manual",
     "dashboard": "npm run dashboard:build && node --disable-warning=ExperimentalWarning scripts/serve-dashboard.mjs",
+    "dashboard:doubao": "npm run dashboard:build && node --disable-warning=ExperimentalWarning scripts/serve-dashboard.mjs --runtime apple-events --browser-app com.bot.pc.doubao.browser",
     "dashboard:dev": "node --disable-warning=ExperimentalWarning scripts/dev-dashboard.mjs",
     "dashboard:build": "vite build web",
     "dashboard:preview": "vite preview web",
     "pages:build": "vite build web --mode demo",
     "render:assets": "node scripts/render-demo-assets.mjs",
     "test:state": "node --disable-warning=ExperimentalWarning scripts/monitor-state.test.mjs",
-    "test:dashboard": "node --disable-warning=ExperimentalWarning scripts/dashboard-api.test.mjs && node scripts/dashboard-scan-job.test.mjs && node scripts/dashboard-smoke.test.mjs",
-    "check": "node --check scripts/collect-followers.mjs && node --check scripts/dashboard-data.mjs && node --check scripts/dashboard-scan-job.mjs && node --check scripts/serve-dashboard.mjs && node --check scripts/dev-dashboard.mjs && node --check scripts/render-demo-assets.mjs && node --check scripts/dashboard-scan-job.test.mjs && tsc -p web/tsconfig.json"
+    "test:dashboard": "node --disable-warning=ExperimentalWarning scripts/dashboard-api.test.mjs && node scripts/browser-runtime.test.mjs && node scripts/dashboard-scan-job.test.mjs && node scripts/dashboard-smoke.test.mjs",
+    "check": "node --check scripts/browser-runtime.mjs && node --check scripts/collect-followers.mjs && node --check scripts/dashboard-data.mjs && node --check scripts/dashboard-scan-job.mjs && node --check scripts/serve-dashboard.mjs && node --check scripts/dev-dashboard.mjs && node --check scripts/render-demo-assets.mjs && node --check scripts/browser-runtime.test.mjs && node --check scripts/dashboard-scan-job.test.mjs && tsc -p web/tsconfig.json"
   },
   "engines": {
     "node": ">=24"
