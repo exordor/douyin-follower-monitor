@@ -314,6 +314,8 @@ function createScanJobManager({
       '--api',
       '--mode',
       'monitor',
+      '--auth-wait-seconds',
+      '300',
       '--db',
       db,
       '--out-dir',

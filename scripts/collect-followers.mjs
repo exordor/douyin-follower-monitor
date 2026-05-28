@@ -37,6 +37,7 @@ function parseArgs(argv) {
     waitMaxMs: 900,
     slowMo: 40,
     checkpointEvery: 1,
+    authWaitSeconds: Number.parseInt(process.env.DOUYIN_AUTH_WAIT_SECONDS || '0', 10),
     help: false
   };
 
@@ -70,6 +71,7 @@ function parseArgs(argv) {
     else if (arg === '--wait-max-ms') options.waitMaxMs = Number.parseInt(next(), 10);
     else if (arg === '--slow-mo') options.slowMo = Number.parseInt(next(), 10);
     else if (arg === '--checkpoint-every') options.checkpointEvery = Number.parseInt(next(), 10);
+    else if (arg === '--auth-wait-seconds') options.authWaitSeconds = Number.parseInt(next(), 10);
     else if (arg === '--api-source-type') options.apiSourceType = Number.parseInt(next(), 10);
     else if (arg === '--headless') options.headless = true;
     else if (arg === '--manual') options.manual = true;
@@ -94,6 +96,7 @@ function parseArgs(argv) {
     waitMaxMs: options.waitMaxMs,
     slowMo: options.slowMo,
     checkpointEvery: options.checkpointEvery,
+    authWaitSeconds: options.authWaitSeconds,
     apiSourceType: options.apiSourceType
   })) {
     if (!Number.isFinite(value) || value < 0) {
@@ -138,6 +141,8 @@ Options:
   --idle-rounds <number> Stop after this many scrolls without new rows (default: 30)
   --max-rounds <number>  Hard scroll limit (default: 1200)
   --checkpoint-every <n> Save partial progress after this many new rows (default: 1, 0 disables periodic saves)
+  --auth-wait-seconds <n>
+                         Wait this long for manual login/captcha in non-TTY browser runtime (default: 0)
   --headless             Run headless; not recommended for login
   --help                 Show this message
 `);
@@ -1622,6 +1627,61 @@ function pageLooksLoggedOut(pageInfo) {
   return /扫码登录|验证码登录|密码登录|登录后可/.test(pageInfo?.text || '');
 }
 
+function pageNeedsHumanVerification(pageInfo) {
+  return /验证码中间页|请完成下列验证|拖动完成|拼图|captcha|verify/i.test(`${pageInfo?.title || ''}\n${pageInfo?.text || ''}`);
+}
+
+function isTransientPageReadError(error) {
+  return /execution context was destroyed|navigation|frame was detached|target closed|cannot find context/i.test(
+    String(error?.message || error)
+  );
+}
+
+async function waitForManualAuthIfNeeded(options, pageInfo) {
+  const needsAuth = pageLooksLoggedOut(pageInfo);
+  const needsVerification = pageNeedsHumanVerification(pageInfo);
+  if (!needsAuth && !needsVerification) return pageInfo;
+
+  const promptText = needsVerification
+    ? '浏览器触发了抖音验证码。请在打开的浏览器窗口中手动完成验证，并确认进入自己的抖音主页。'
+    : '浏览器里看起来还未登录。请完成登录，并确认打开的是你的个人主页。';
+
+  if (process.stdin.isTTY) {
+    await promptEnter(promptText);
+    return options.browserRuntime.readPageInfo();
+  }
+
+  if (!options.authWaitSeconds) {
+    throw new Error(`${promptText} 本次非交互式采集未启用等待，请先完成验证后重试，或通过 dashboard 启动采集。`);
+  }
+
+  const deadline = Date.now() + options.authWaitSeconds * 1000;
+  console.log(`${promptText} 正在等待人工处理，最长 ${options.authWaitSeconds} 秒。`);
+  let loggedNavigationWait = false;
+  while (Date.now() < deadline) {
+    await sleep(2000);
+    let current;
+    try {
+      current = await options.browserRuntime.readPageInfo();
+    } catch (error) {
+      if (isTransientPageReadError(error)) {
+        if (!loggedNavigationWait) {
+          console.log('页面正在跳转或验证中，继续等待。');
+          loggedNavigationWait = true;
+        }
+        continue;
+      }
+      throw error;
+    }
+    if (!pageLooksLoggedOut(current) && !pageNeedsHumanVerification(current)) {
+      console.log('人工登录/验证已完成，继续采集。');
+      return current;
+    }
+  }
+
+  throw new Error(`等待人工登录/验证码超时: ${options.authWaitSeconds} 秒。`);
+}
+
 function shouldUseBrowserRuntime(options) {
   return Boolean(
     options.api ||
@@ -1664,12 +1724,7 @@ async function prepareBrowserRuntime(options) {
   else if (openResult === 'opened') console.log('已打开抖音个人页。');
 
   const pageInfo = await options.browserRuntime.readPageInfo();
-  if (pageLooksLoggedOut(pageInfo)) {
-    if (!process.stdin.isTTY) {
-      throw new Error('浏览器页面看起来尚未登录。请先用同一 runtime/profile 登录抖音后再从 dashboard 或后台任务启动采集。');
-    }
-    await promptEnter('浏览器里看起来还未登录。请完成登录，并确认打开的是你的个人主页。');
-  }
+  await waitForManualAuthIfNeeded(options, pageInfo);
 }
 
 async function readPageProfileStats(page) {

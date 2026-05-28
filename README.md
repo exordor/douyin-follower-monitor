@@ -109,6 +109,8 @@ Dashboard 也可以在“采集控制”面板上传 cookie-manager 无损 JSON�
 
 Cookie 注入不会主动刷新已打开的抖音页面；新 profile 或空白页会在首次导航前注入 cookie，避免因为页面刷新增加验证码触发概率。
 
+如果抖音在新 profile 中显示“验证码中间页”，dashboard 启动的采集任务会等待人工处理。请在弹出的浏览器窗口里手动完成验证码，任务会继续采集；项目不会自动处理或绕过验证码。
+
 ## 取关判断
 
 ![Removal state machine](docs/diagrams/removal-state-machine.png)

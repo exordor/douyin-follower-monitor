@@ -249,14 +249,18 @@ try {
   });
   assert.equal(finalStatus.signal, 'SIGTERM');
   assert.equal(children[0].killSignal, 'SIGTERM');
-  assert.deepEqual(children[0].args.slice(0, 8), [
+  assert.deepEqual(children[0].args.slice(0, 7), [
     '--disable-warning=ExperimentalWarning',
     path.join(process.cwd(), 'scripts', 'collect-followers.mjs'),
     '--runtime',
     'cdp',
     '--api',
     '--mode',
-    'monitor',
+    'monitor'
+  ]);
+  assert.deepEqual(children[0].args.slice(7, 10), [
+    '--auth-wait-seconds',
+    '300',
     '--db'
   ]);
   assert.equal(children[0].args.includes('--cdp-url'), true);
