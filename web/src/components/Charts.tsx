@@ -8,9 +8,22 @@ function compact(value: number) {
   return new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
-function pointsFor(values: number[], width: number, height: number, padding = 26) {
-  const max = Math.max(...values, 1);
-  const min = Math.min(...values, max);
+function axisRange(values: number[]) {
+  const finiteValues = values.filter((value) => Number.isFinite(value));
+  if (!finiteValues.length) return { min: 0, max: 1 };
+
+  const rawMin = Math.min(...finiteValues);
+  const rawMax = Math.max(...finiteValues);
+  const spread = Math.max(rawMax - rawMin, 1);
+  const padding = Math.max(Math.ceil(spread * 0.2), 1);
+
+  return {
+    min: Math.max(0, Math.floor(rawMin - padding)),
+    max: Math.ceil(rawMax + padding)
+  };
+}
+
+function pointsFor(values: number[], width: number, height: number, min: number, max: number, padding = 26) {
   const spread = Math.max(max - min, 1);
   return values.map((value, index) => {
     const x = padding + (index * (width - padding * 2)) / Math.max(values.length - 1, 1);
@@ -24,18 +37,17 @@ function pathFrom(points: readonly (readonly [number, number])[]) {
 }
 
 export function TrendChart({ data }: { data: TimelinePoint[] }) {
+  if (!data.length) {
+    return <div className="empty-chart">暂无扫描记录，先运行 npm run monitor:doubao</div>;
+  }
+
   const width = 760;
   const height = 260;
   const enumerable = data.map((row) => numeric(row.enumerableCount));
   const profile = data.map((row) => numeric(row.profileFollowerCount));
-  const enumerablePoints = pointsFor(enumerable, width, height);
-  const profilePoints = pointsFor(profile, width, height);
-  const minLabel = Math.min(...enumerable, ...profile, 0);
-  const maxLabel = Math.max(...enumerable, ...profile, 1);
-
-  if (!data.length) {
-    return <div className="empty-chart">暂无扫描记录，先运行 npm run monitor:doubao</div>;
-  }
+  const { min, max } = axisRange([...enumerable, ...profile]);
+  const enumerablePoints = pointsFor(enumerable, width, height, min, max);
+  const profilePoints = pointsFor(profile, width, height, min, max);
 
   return (
     <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="粉丝趋势">
@@ -49,8 +61,8 @@ export function TrendChart({ data }: { data: TimelinePoint[] }) {
         const y = 26 + (line * (height - 52)) / 3;
         return <line key={line} x1="26" x2={width - 26} y1={y} y2={y} stroke="#e8edf2" strokeWidth="1" />;
       })}
-      <text x="28" y="20" className="chart-label">{compact(maxLabel)}</text>
-      <text x="28" y={height - 8} className="chart-label">{compact(minLabel)}</text>
+      <text x="28" y="20" className="chart-label">{compact(max)}</text>
+      <text x="28" y={height - 8} className="chart-label">{compact(min)}</text>
       <path
         d={`${pathFrom(enumerablePoints)} L ${width - 26} ${height - 26} L 26 ${height - 26} Z`}
         fill="url(#trendFill)"
