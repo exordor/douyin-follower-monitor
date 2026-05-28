@@ -1,0 +1,58 @@
+{
+  "name": "douyin-follower-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first Douyin follower change monitor with SQLite history and a private dashboard.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/exordor/douyin-follower-monitor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/exordor/douyin-follower-monitor/issues"
+  },
+  "homepage": "https://exordor.github.io/douyin-follower-monitor",
+  "keywords": [
+    "douyin",
+    "follower-monitor",
+    "creator-tools",
+    "local-first",
+    "sqlite",
+    "dashboard"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "collect": "node scripts/collect-followers.mjs",
+    "collect:doubao": "node scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser",
+    "collect:doubao:api": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser --api --mode full",
+    "monitor:doubao": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser --api --mode monitor",
+    "scan:recent": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser --api --mode recent",
+    "scan:full": "node --disable-warning=ExperimentalWarning scripts/collect-followers.mjs --browser-app com.bot.pc.doubao.browser --api --mode full",
+    "collect:manual": "node scripts/collect-followers.mjs --manual",
+    "dashboard": "npm run dashboard:build && node --disable-warning=ExperimentalWarning scripts/serve-dashboard.mjs",
+    "dashboard:dev": "node --disable-warning=ExperimentalWarning scripts/dev-dashboard.mjs",
+    "dashboard:build": "vite build web",
+    "dashboard:preview": "vite preview web",
+    "pages:build": "vite build web --mode demo",
+    "render:assets": "node scripts/render-demo-assets.mjs",
+    "test:state": "node --disable-warning=ExperimentalWarning scripts/monitor-state.test.mjs",
+    "test:dashboard": "node --disable-warning=ExperimentalWarning scripts/dashboard-api.test.mjs && node scripts/dashboard-smoke.test.mjs",
+    "check": "node --check scripts/collect-followers.mjs && node --check scripts/dashboard-data.mjs && node --check scripts/serve-dashboard.mjs && node --check scripts/dev-dashboard.mjs && node --check scripts/render-demo-assets.mjs && tsc -p web/tsconfig.json"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "lucide-react": "^1.17.0",
+    "playwright": "^1.57.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14"
+  }
+}

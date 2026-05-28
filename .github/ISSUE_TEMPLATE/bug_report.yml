@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible problem.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请不要上传真实 `data/`、SQLite、CSV、secUid、cookie 或带私信内容的截图。
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 发生了什么？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 给出最小复现命令和操作。
+      placeholder: |
+        1. 运行 npm run monitor:doubao
+        2. 打开 dashboard
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 环境
+      placeholder: "macOS 15, Node 24.13.1, 豆包浏览器 ..."
+    validations:
+      required: true

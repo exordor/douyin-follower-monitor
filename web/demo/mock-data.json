@@ -1,0 +1,109 @@
+{
+  "summary": {
+    "generatedAt": "2026-05-28T10:00:00.000Z",
+    "hasDatabase": true,
+    "dbPath": "data/followers.db",
+    "outDir": "data",
+    "statusCounts": {
+      "active": 12480,
+      "suspected_removed": 8,
+      "removed": 143,
+      "total": 12631
+    },
+    "profileFollowerCount": 12606,
+    "enumerableCount": 12480,
+    "hiddenOrUnavailableCount": 126,
+    "latestRun": {
+      "runId": "run-demo-20260528",
+      "mode": "recent",
+      "requestedMode": "monitor",
+      "startedAt": "2026-05-28T09:45:00.000Z",
+      "finishedAt": "2026-05-28T09:46:18.000Z",
+      "status": "completed",
+      "profileFollowerCount": 12606,
+      "enumerableCount": 12480,
+      "hiddenOrUnavailableCount": 126,
+      "pagesFetched": 5,
+      "reason": "recent-window"
+    },
+    "latestCompletedRun": {
+      "runId": "run-demo-20260528",
+      "mode": "recent",
+      "requestedMode": "monitor",
+      "startedAt": "2026-05-28T09:45:00.000Z",
+      "finishedAt": "2026-05-28T09:46:18.000Z",
+      "status": "completed",
+      "profileFollowerCount": 12606,
+      "enumerableCount": 12480,
+      "hiddenOrUnavailableCount": 126,
+      "pagesFetched": 5,
+      "reason": "recent-window"
+    },
+    "latestChange": {
+      "mode": "recent",
+      "newCount": 37,
+      "suspectedRemovedCount": 8,
+      "removedCount": 2,
+      "renamedCount": 4,
+      "reappearedCount": 1
+    },
+    "lastChangeCounts": {
+      "newCount": 37,
+      "suspectedRemovedCount": 8,
+      "removedCount": 2,
+      "renamedCount": 4,
+      "reappearedCount": 1
+    }
+  },
+  "timeline": [
+    { "runId": "run-01", "mode": "full", "requestedMode": "monitor", "startedAt": "2026-05-20T08:00:00.000Z", "finishedAt": "2026-05-20T08:18:00.000Z", "status": "completed", "profileFollowerCount": 12190, "enumerableCount": 12072, "hiddenOrUnavailableCount": 118, "pagesFetched": 622, "reason": "no-full-baseline" },
+    { "runId": "run-02", "mode": "recent", "requestedMode": "monitor", "startedAt": "2026-05-21T08:00:00.000Z", "finishedAt": "2026-05-21T08:01:16.000Z", "status": "completed", "profileFollowerCount": 12244, "enumerableCount": 12121, "hiddenOrUnavailableCount": 123, "pagesFetched": 5, "reason": "recent-window" },
+    { "runId": "run-03", "mode": "recent", "requestedMode": "monitor", "startedAt": "2026-05-22T08:00:00.000Z", "finishedAt": "2026-05-22T08:01:12.000Z", "status": "completed", "profileFollowerCount": 12302, "enumerableCount": 12182, "hiddenOrUnavailableCount": 120, "pagesFetched": 5, "reason": "recent-window" },
+    { "runId": "run-04", "mode": "full", "requestedMode": "monitor", "startedAt": "2026-05-23T08:00:00.000Z", "finishedAt": "2026-05-23T08:17:29.000Z", "status": "completed", "profileFollowerCount": 12347, "enumerableCount": 12228, "hiddenOrUnavailableCount": 119, "pagesFetched": 628, "reason": "full-interval-elapsed" },
+    { "runId": "run-05", "mode": "recent", "requestedMode": "monitor", "startedAt": "2026-05-24T08:00:00.000Z", "finishedAt": "2026-05-24T08:01:11.000Z", "status": "completed", "profileFollowerCount": 12408, "enumerableCount": 12286, "hiddenOrUnavailableCount": 122, "pagesFetched": 5, "reason": "recent-window" },
+    { "runId": "run-06", "mode": "recent", "requestedMode": "monitor", "startedAt": "2026-05-25T08:00:00.000Z", "finishedAt": "2026-05-25T08:01:18.000Z", "status": "completed", "profileFollowerCount": 12496, "enumerableCount": 12372, "hiddenOrUnavailableCount": 124, "pagesFetched": 5, "reason": "recent-window" },
+    { "runId": "run-07", "mode": "full", "requestedMode": "monitor", "startedAt": "2026-05-26T08:00:00.000Z", "finishedAt": "2026-05-26T08:19:44.000Z", "status": "completed", "profileFollowerCount": 12551, "enumerableCount": 12427, "hiddenOrUnavailableCount": 124, "pagesFetched": 637, "reason": "full-interval-elapsed" },
+    { "runId": "run-demo-20260528", "mode": "recent", "requestedMode": "monitor", "startedAt": "2026-05-28T09:45:00.000Z", "finishedAt": "2026-05-28T09:46:18.000Z", "status": "completed", "profileFollowerCount": 12606, "enumerableCount": 12480, "hiddenOrUnavailableCount": 126, "pagesFetched": 5, "reason": "recent-window" }
+  ],
+  "eventDaily": [
+    { "date": "2026-05-20", "new": 72, "renamed": 3, "suspected_removed": 0, "removed": 0, "reappeared": 1 },
+    { "date": "2026-05-21", "new": 54, "renamed": 1, "suspected_removed": 0, "removed": 0, "reappeared": 0 },
+    { "date": "2026-05-22", "new": 61, "renamed": 2, "suspected_removed": 0, "removed": 0, "reappeared": 0 },
+    { "date": "2026-05-23", "new": 45, "renamed": 4, "suspected_removed": 7, "removed": 3, "reappeared": 1 },
+    { "date": "2026-05-24", "new": 59, "renamed": 1, "suspected_removed": 0, "removed": 0, "reappeared": 0 },
+    { "date": "2026-05-25", "new": 86, "renamed": 5, "suspected_removed": 0, "removed": 0, "reappeared": 2 },
+    { "date": "2026-05-26", "new": 55, "renamed": 2, "suspected_removed": 8, "removed": 2, "reappeared": 1 },
+    { "date": "2026-05-28", "new": 37, "renamed": 4, "suspected_removed": 0, "removed": 0, "reappeared": 1 }
+  ],
+  "followers": {
+    "total": 6,
+    "limit": 20,
+    "offset": 0,
+    "rows": [
+      { "id": "demo-sec-001", "uid": "10001", "nickname": "晨间剪辑师", "profileUrl": "https://www.douyin.com/user/demo-sec-001", "firstSeenAt": "2026-05-28T09:41:00.000Z", "lastSeenAt": "2026-05-28T09:45:30.000Z", "lastFullSeenAt": "2026-05-26T08:15:20.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0 },
+      { "id": "demo-sec-002", "uid": "10002", "nickname": "山城记录员", "profileUrl": "https://www.douyin.com/user/demo-sec-002", "firstSeenAt": "2026-05-28T09:42:00.000Z", "lastSeenAt": "2026-05-28T09:45:20.000Z", "lastFullSeenAt": "2026-05-26T08:15:18.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0 },
+      { "id": "demo-sec-003", "uid": "10003", "nickname": "算法观察者", "profileUrl": "https://www.douyin.com/user/demo-sec-003", "firstSeenAt": "2026-05-26T08:12:00.000Z", "lastSeenAt": "2026-05-26T08:17:02.000Z", "lastFullSeenAt": "2026-05-26T08:17:02.000Z", "status": "suspected_removed", "suspectedRemovedAt": "2026-05-28T09:46:00.000Z", "removedAt": null, "missingFullScans": 1 },
+      { "id": "demo-sec-004", "uid": "10004", "nickname": "封面设计工坊", "profileUrl": "https://www.douyin.com/user/demo-sec-004", "firstSeenAt": "2026-05-20T08:11:00.000Z", "lastSeenAt": "2026-05-23T08:16:02.000Z", "lastFullSeenAt": "2026-05-23T08:16:02.000Z", "status": "removed", "suspectedRemovedAt": "2026-05-26T08:19:00.000Z", "removedAt": "2026-05-28T09:46:00.000Z", "missingFullScans": 2 },
+      { "id": "demo-sec-005", "uid": "10005", "nickname": "深夜数据台", "profileUrl": "https://www.douyin.com/user/demo-sec-005", "firstSeenAt": "2026-05-25T08:00:00.000Z", "lastSeenAt": "2026-05-28T09:45:02.000Z", "lastFullSeenAt": "2026-05-26T08:14:20.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0 },
+      { "id": "demo-sec-006", "uid": "10006", "nickname": "留学影像册", "profileUrl": "https://www.douyin.com/user/demo-sec-006", "firstSeenAt": "2026-05-22T08:01:00.000Z", "lastSeenAt": "2026-05-28T09:44:02.000Z", "lastFullSeenAt": "2026-05-26T08:12:20.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0 }
+    ]
+  },
+  "events": {
+    "total": 6,
+    "limit": 20,
+    "offset": 0,
+    "rows": [
+      { "eventId": 1101, "followerId": "demo-sec-001", "type": "new", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:45:30.000Z", "payload": { "nickname": "晨间剪辑师" }, "nickname": "晨间剪辑师", "profileUrl": "https://www.douyin.com/user/demo-sec-001", "status": "active" },
+      { "eventId": 1102, "followerId": "demo-sec-003", "type": "suspected_removed", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:46:00.000Z", "payload": { "missingFullScans": 1 }, "nickname": "算法观察者", "profileUrl": "https://www.douyin.com/user/demo-sec-003", "status": "suspected_removed" },
+      { "eventId": 1103, "followerId": "demo-sec-004", "type": "removed", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:46:02.000Z", "payload": { "missingFullScans": 2 }, "nickname": "封面设计工坊", "profileUrl": "https://www.douyin.com/user/demo-sec-004", "status": "removed" },
+      { "eventId": 1104, "followerId": "demo-sec-005", "type": "renamed", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:46:05.000Z", "payload": { "before": "数据台", "after": "深夜数据台" }, "nickname": "深夜数据台", "profileUrl": "https://www.douyin.com/user/demo-sec-005", "status": "active" },
+      { "eventId": 1105, "followerId": "demo-sec-006", "type": "reappeared", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:46:09.000Z", "payload": { "previousStatus": "suspected_removed" }, "nickname": "留学影像册", "profileUrl": "https://www.douyin.com/user/demo-sec-006", "status": "active" },
+      { "eventId": 1106, "followerId": "demo-sec-002", "type": "new", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:45:20.000Z", "payload": { "nickname": "山城记录员" }, "nickname": "山城记录员", "profileUrl": "https://www.douyin.com/user/demo-sec-002", "status": "active" }
+    ]
+  },
+  "runs": [
+    { "runId": "run-demo-20260528", "mode": "recent", "requestedMode": "monitor", "startedAt": "2026-05-28T09:45:00.000Z", "finishedAt": "2026-05-28T09:46:18.000Z", "status": "completed", "profileFollowerCount": 12606, "enumerableCount": 12480, "hiddenOrUnavailableCount": 126, "pagesFetched": 5, "reason": "recent-window" },
+    { "runId": "run-07", "mode": "full", "requestedMode": "monitor", "startedAt": "2026-05-26T08:00:00.000Z", "finishedAt": "2026-05-26T08:19:44.000Z", "status": "completed", "profileFollowerCount": 12551, "enumerableCount": 12427, "hiddenOrUnavailableCount": 124, "pagesFetched": 637, "reason": "full-interval-elapsed" },
+    { "runId": "run-06", "mode": "recent", "requestedMode": "monitor", "startedAt": "2026-05-25T08:00:00.000Z", "finishedAt": "2026-05-25T08:01:18.000Z", "status": "completed", "profileFollowerCount": 12496, "enumerableCount": 12372, "hiddenOrUnavailableCount": 124, "pagesFetched": 5, "reason": "recent-window" }
+  ]
+}
