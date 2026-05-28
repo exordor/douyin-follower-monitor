@@ -17,21 +17,24 @@ import {
   Filter,
   GitBranch,
   History,
+  KeyRound,
   Play,
   RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
   Square,
+  Trash2,
+  Upload,
   UserMinus,
   UserPlus,
   type LucideIcon
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 
-import { connectScanEvents, exportUrl, isDemoMode, loadEvents, loadFollowers, loadOverview, loadScanStatus, startScanJob, stopScanJob } from './api';
+import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadScanStatus, startScanJob, stopScanJob } from './api';
 import { EventBars, StatusDonut, TrendChart } from './components/Charts';
-import type { EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, ScanJobStatus, ScanRun } from './types';
+import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, ScanJobStatus, ScanRun } from './types';
 
 const EVENT_LABELS: Record<EventType, string> = {
   new: '新增',
@@ -124,6 +127,9 @@ function App() {
   const [scanStatus, setScanStatus] = useState<ScanJobStatus | null>(null);
   const [scanActionError, setScanActionError] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
+  const [cookieAuth, setCookieAuth] = useState<CookieAuthStatus | null>(null);
+  const [cookieError, setCookieError] = useState('');
+  const [cookieBusy, setCookieBusy] = useState(false);
   const previousScanStateRef = useRef('');
   const refreshAfterScanRef = useRef<() => Promise<void>>(async () => {});
 
@@ -195,16 +201,20 @@ function App() {
 
   useEffect(() => {
     if (isDemoMode) {
-      loadScanStatus().then(setScanStatus).catch(() => {});
+      loadScanStatus().then((status) => {
+        setScanStatus(status);
+        setCookieAuth(status.cookieAuth);
+      }).catch(() => {});
       return undefined;
     }
 
     let alive = true;
-    loadScanStatus()
-      .then((status) => {
+    Promise.all([loadScanStatus(), loadCookieAuthStatus()])
+      .then(([status, authStatus]) => {
         if (!alive) return;
         previousScanStateRef.current = status.status;
         setScanStatus(status);
+        setCookieAuth(authStatus);
       })
       .catch((err) => {
         if (alive) setScanActionError(err instanceof Error ? err.message : String(err));
@@ -217,6 +227,7 @@ function App() {
       const isFinished = ['completed', 'failed', 'interrupted'].includes(status.status);
       previousScanStateRef.current = status.status;
       setScanStatus(status);
+      if (status.cookieAuth) setCookieAuth(status.cookieAuth);
       setScanActionError('');
       if (wasActive && isFinished) {
         refreshAfterScanRef.current().catch((err) => setScanActionError(err instanceof Error ? err.message : String(err)));
@@ -244,6 +255,37 @@ function App() {
       setScanActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setScanBusy(false);
+    }
+  };
+
+  const handleCookieImport = async (file: File) => {
+    if (isDemoMode) return;
+    setCookieBusy(true);
+    setCookieError('');
+    try {
+      const content = await file.text();
+      const status = await importCookieAuth(file.name, content);
+      setCookieAuth(status);
+      setScanStatus((current) => current ? { ...current, cookieAuth: status } : current);
+    } catch (err) {
+      setCookieError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCookieBusy(false);
+    }
+  };
+
+  const handleCookieClear = async () => {
+    if (isDemoMode) return;
+    setCookieBusy(true);
+    setCookieError('');
+    try {
+      const status = await clearCookieAuth();
+      setCookieAuth(status);
+      setScanStatus((current) => current ? { ...current, cookieAuth: status } : current);
+    } catch (err) {
+      setCookieError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCookieBusy(false);
     }
   };
 
@@ -329,10 +371,15 @@ function App() {
         <ScanControlPanel
           status={scanStatus}
           error={scanActionError}
+          cookieAuth={cookieAuth}
+          cookieError={cookieError}
+          cookieBusy={cookieBusy}
           isDemo={isDemoMode}
           running={scanRunning}
           busy={scanBusy}
           onAction={handleScanAction}
+          onCookieImport={handleCookieImport}
+          onCookieClear={handleCookieClear}
         />
 
         <section className="metrics" id="overview">
@@ -486,24 +533,54 @@ function PanelHeader({ icon: Icon, title, subtitle }: { icon: LucideIcon; title:
 function ScanControlPanel({
   status,
   error,
+  cookieAuth,
+  cookieError,
+  cookieBusy,
   isDemo,
   running,
   busy,
-  onAction
+  onAction,
+  onCookieImport,
+  onCookieClear
 }: {
   status: ScanJobStatus | null;
   error: string;
+  cookieAuth: CookieAuthStatus | null;
+  cookieError: string;
+  cookieBusy: boolean;
   isDemo: boolean;
   running: boolean;
   busy: boolean;
   onAction: () => void;
+  onCookieImport: (file: File) => void;
+  onCookieClear: () => void;
 }) {
+  const cookieInputRef = useRef<HTMLInputElement>(null);
   const hasStatus = Boolean(status);
   const logs = status?.logLines.slice(-8) || [];
   const change = status?.changeSummary;
   const partialText = status?.partial
     ? `${formatDate(status.partial.collectedAt)} 保存 ${formatNumber(status.partial.count)} 条`
     : '等待采集进度';
+  const auth = cookieAuth || status?.cookieAuth || null;
+  const cookieState = isDemo
+    ? '演示禁用'
+    : auth?.error
+      ? '配置异常'
+      : auth?.configured
+        ? `已配置 ${formatNumber(auth.acceptedCount)} / ${formatNumber(auth.cookieCount)}`
+        : '未配置';
+  const cookieDetail = auth?.configured
+    ? `导出 ${formatDate(auth.exportedAt)} · 更新 ${formatDate(auth.updatedAt)} · 跳过 ${formatNumber(auth.skippedCount)}`
+    : auth?.runtimeSupported === false
+      ? '当前 runtime 不使用 cookie 注入'
+      : '等待上传 cookie-manager 无损 JSON';
+
+  const handleCookieFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (file) onCookieImport(file);
+  };
 
   return (
     <section className={`panel scan-panel ${running ? 'active' : ''}`}>
@@ -537,6 +614,39 @@ function ScanControlPanel({
         <div><span>Partial</span><strong>{partialText}</strong></div>
         <div><span>结束</span><strong>{formatDate(status?.finishedAt)}</strong></div>
       </div>
+
+      <div className="cookie-auth-card">
+        <div className="cookie-auth-main">
+          <div className="cookie-auth-icon"><KeyRound size={17} /></div>
+          <div>
+            <span>Cookie 登录态</span>
+            <strong>{cookieState}</strong>
+            <small>{auth?.error || cookieDetail}</small>
+          </div>
+        </div>
+        <div className="cookie-auth-actions">
+          <input
+            ref={cookieInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="visually-hidden"
+            onChange={handleCookieFileChange}
+          />
+          <button className="button compact" type="button" onClick={() => cookieInputRef.current?.click()} disabled={isDemo || cookieBusy || running}>
+            <Upload size={15} />导入
+          </button>
+          <button className="button compact" type="button" onClick={onCookieClear} disabled={isDemo || cookieBusy || running || !auth?.configured}>
+            <Trash2 size={15} />清除
+          </button>
+        </div>
+      </div>
+
+      {cookieError && (
+        <div className="scan-error">
+          <AlertTriangle size={16} />
+          <span>{cookieError}</span>
+        </div>
+      )}
 
       {change && (
         <div className="scan-summary">

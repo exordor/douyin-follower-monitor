@@ -18,6 +18,7 @@ function parseArgs(argv) {
     runtime: process.env.DOUYIN_RUNTIME || 'auto',
     cdpUrl: process.env.DOUYIN_CDP_URL || '',
     browserApp: process.env.DOUYIN_BROWSER_APP || '',
+    cookieFile: process.env.DOUYIN_COOKIE_FILE ? path.resolve(ROOT_DIR, process.env.DOUYIN_COOKIE_FILE) : '',
     outDir: path.join(ROOT_DIR, 'data'),
     headless: false,
     manual: false,
@@ -55,6 +56,7 @@ function parseArgs(argv) {
     else if (arg === '--runtime') options.runtime = next();
     else if (arg === '--cdp-url') options.cdpUrl = next();
     else if (arg === '--browser-app') options.browserApp = next();
+    else if (arg === '--cookie-file') options.cookieFile = path.resolve(ROOT_DIR, next());
     else if (arg === '--out-dir') options.outDir = path.resolve(ROOT_DIR, next());
     else if (arg === '--mode') options.mode = next();
     else if (arg === '--max') options.max = Number.parseInt(next(), 10);
@@ -119,6 +121,7 @@ Options:
   --profile <path>       Browser profile directory (default: .douyin-browser)
   --cdp-url <url>        Chrome DevTools Protocol endpoint, e.g. http://127.0.0.1:9222
   --browser-app <app>    Use the active tab of an existing browser app/bundle id
+  --cookie-file <path>   cookie-manager lossless JSON for playwright/cdp runtime
   --out-dir <path>       Output directory (default: data)
   --api                  Use Douyin's in-page follower API instead of DOM scrolling
   --api-source-type <n>  Follower API source_type (default: 0)
@@ -1442,6 +1445,7 @@ async function persistProgress(options, followers, metadata = {}) {
     target: options.target,
     runtime: options.runtime || '',
     runtimeLabel: options.runtimeLabel || '',
+    cookieAuth: options.cookieAuth || null,
     mode: options.effectiveMode || options.mode,
     requestedMode: options.mode,
     reason: options.modeReason || '',
@@ -1488,6 +1492,7 @@ async function persistResult(options, followers) {
     target: options.target,
     runtime: options.runtime || '',
     runtimeLabel: options.runtimeLabel || '',
+    cookieAuth: options.cookieAuth || null,
     mode: options.effectiveMode || options.mode,
     requestedMode: options.mode,
     reason: options.modeReason || '',
@@ -1512,6 +1517,7 @@ async function persistResult(options, followers) {
       requestedMode: options.mode,
       runtime: options.runtime || '',
       runtimeLabel: options.runtimeLabel || '',
+      cookieAuth: options.cookieAuth || null,
       reason: options.monitorChange.reason || options.modeReason || '',
       scanComplete: options.scanComplete ?? null,
       currentCount: options.monitorChange.currentCount,
@@ -1543,6 +1549,7 @@ async function persistResult(options, followers) {
       requestedMode: options.mode,
       runtime: options.runtime || '',
       runtimeLabel: options.runtimeLabel || '',
+      cookieAuth: options.cookieAuth || null,
       reason: options.modeReason || '',
       scanComplete: options.scanComplete ?? null,
       currentCount: followers.length,
@@ -1620,11 +1627,21 @@ function shouldUseBrowserRuntime(options) {
     options.api ||
     options.browserApp ||
     options.cdpUrl ||
+    options.cookieFile ||
     options.runtime !== 'auto' ||
     process.env.DOUYIN_RUNTIME ||
     process.env.DOUYIN_CDP_URL ||
-    process.env.DOUYIN_BROWSER_APP
+    process.env.DOUYIN_BROWSER_APP ||
+    process.env.DOUYIN_COOKIE_FILE
   );
+}
+
+function formatCookieAuthLog(summary) {
+  if (!summary?.configured) return '';
+  const skipped = summary.skippedReasons?.length
+    ? `；跳过原因: ${summary.skippedReasons.map((item) => `${item.reason}=${item.count}`).join(', ')}`
+    : '';
+  return `Cookie 登录态: 已导入 ${summary.acceptedCount}/${summary.cookieCount}，跳过 ${summary.skippedCount}${skipped}`;
 }
 
 async function prepareBrowserRuntime(options) {
@@ -1635,10 +1652,14 @@ async function prepareBrowserRuntime(options) {
   options.browserApp = runtimeConfig.browserApp;
   options.cdpUrl = runtimeConfig.cdpUrl;
   options.profile = runtimeConfig.profile || options.profile;
+  options.cookieFile = runtimeConfig.cookieFile || '';
   options.browserRuntime = await createBrowserRuntime(options);
 
   console.log(`Runtime: ${options.runtimeLabel} (${options.runtime})`);
   const openResult = await options.browserRuntime.openOrFocusTarget(options.target);
+  options.cookieAuth = options.browserRuntime.cookieAuthSummary || null;
+  const cookieLog = formatCookieAuthLog(options.cookieAuth);
+  if (cookieLog) console.log(cookieLog);
   if (openResult === 'found') console.log('已切换到可用的抖音页面。');
   else if (openResult === 'opened') console.log('已打开抖音个人页。');
 

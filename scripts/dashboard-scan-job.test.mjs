@@ -56,14 +56,18 @@ function getFreePort() {
   });
 }
 
-function requestJson(port, method, pathname, headers = {}) {
+function requestJson(port, method, pathname, headers = {}, body = undefined) {
   return new Promise((resolve, reject) => {
+    const payload = body === undefined ? '' : JSON.stringify(body);
     const req = http.request({
       host: '127.0.0.1',
       port,
       method,
       path: pathname,
-      headers
+      headers: {
+        ...headers,
+        ...(payload ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {})
+      }
     }, (res) => {
       let body = '';
       res.setEncoding('utf8');
@@ -78,7 +82,7 @@ function requestJson(port, method, pathname, headers = {}) {
       });
     });
     req.on('error', reject);
-    req.end();
+    req.end(payload);
   });
 }
 
@@ -132,6 +136,29 @@ async function waitFor(predicate, timeoutMs = 5000) {
 
 const dir = await mkdtemp(path.join(os.tmpdir(), 'douyin-scan-job-test-'));
 await mkdir(path.join(dir, 'in-progress'), { recursive: true });
+await mkdir(path.join(dir, 'auth'), { recursive: true });
+const cookieFile = path.join(dir, 'auth', 'douyin-cookies.json');
+const cookieContent = JSON.stringify({
+  format: 'local-cookie-manager-v1',
+  exportedAt: '2026-05-29T00:00:00.000Z',
+  sourceUrl: 'https://www.douyin.com/user/self',
+  scope: { type: 'current-tab-url', origin: 'https://www.douyin.com', url: 'https://www.douyin.com/user/self' },
+  redacted: false,
+  cookieCount: 1,
+  cookies: [{
+    name: 'sessionid',
+    value: 'secret',
+    domain: '.douyin.com',
+    hostOnly: false,
+    path: '/',
+    secure: true,
+    httpOnly: true,
+    sameSite: 'no_restriction',
+    session: true,
+    storeId: '0'
+  }]
+});
+await writeFile(cookieFile, cookieContent);
 await writeFile(path.join(dir, 'in-progress', 'latest.partial.json'), JSON.stringify({
   collectedAt: '2001-01-01T00:00:00.000Z',
   status: 'completed',
@@ -172,6 +199,18 @@ try {
 
   const missingHeader = await requestJson(port, 'POST', '/api/scan/start');
   assert.equal(missingHeader.statusCode, 403);
+
+  const authStatus = await requestJson(port, 'GET', '/api/auth/cookies/status');
+  assert.equal(authStatus.statusCode, 200);
+  assert.equal(authStatus.body.configured, true);
+  assert.equal(authStatus.body.acceptedCount, 1);
+  assert.equal(JSON.stringify(authStatus.body).includes('secret'), false);
+
+  const importForbidden = await requestJson(port, 'POST', '/api/auth/cookies/import', {
+    origin: 'https://example.com',
+    'x-douyin-dashboard-action': 'auth'
+  }, { filename: 'cookies.json', content: cookieContent });
+  assert.equal(importForbidden.statusCode, 403);
 
   const ssePromise = waitForSse(port, (status) => status.status === 'running' || status.count >= 20);
   const started = await requestJson(port, 'POST', '/api/scan/start', {
@@ -221,6 +260,14 @@ try {
     '--db'
   ]);
   assert.equal(children[0].args.includes('--cdp-url'), true);
+  assert.equal(children[0].args.includes('--cookie-file'), true);
+  assert.equal(children[0].args.includes(cookieFile), true);
+
+  const cleared = await requestJson(port, 'DELETE', '/api/auth/cookies', {
+    'x-douyin-dashboard-action': 'auth'
+  });
+  assert.equal(cleared.statusCode, 200);
+  assert.equal(cleared.body.configured, false);
 } finally {
   await close(server);
   await rm(dir, { recursive: true, force: true });

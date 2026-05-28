@@ -1,5 +1,5 @@
 import mockData from '../demo/mock-data.json';
-import type { EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent, ScanJobStatus } from './types';
+import type { CookieAuthStatus, EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent, ScanJobStatus } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const IS_DEMO = import.meta.env.MODE === 'demo';
@@ -22,20 +22,22 @@ async function fetchJson<T>(path: string, params?: Params): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function postJson<T>(path: string): Promise<T> {
+async function mutateJson<T>(path: string, method: 'POST' | 'DELETE', action: 'scan' | 'auth', payload?: unknown): Promise<T> {
   const response = await fetch(withParams(path), {
-    method: 'POST',
+    method,
     headers: {
       accept: 'application/json',
-      'x-douyin-dashboard-action': 'scan'
-    }
+      'content-type': 'application/json',
+      'x-douyin-dashboard-action': action
+    },
+    body: payload === undefined ? undefined : JSON.stringify(payload)
   });
-  const body = await response.json().catch(() => ({}));
+  const responseBody = await response.json().catch(() => ({} as { error?: string }));
   if (!response.ok) {
-    const error = body?.error || `${response.status} ${response.statusText}`;
+    const error = responseBody?.error || `${response.status} ${response.statusText}`;
     throw new Error(String(error));
   }
-  return body as T;
+  return responseBody as T;
 }
 
 function filterFollowers(params: Params = {}): Page<Follower> {
@@ -117,6 +119,17 @@ export async function loadScanStatus(): Promise<ScanJobStatus> {
       hiddenOrUnavailableCount: null,
       runtime: 'demo',
       runtimeLabel: 'Demo data',
+      cookieAuth: {
+        configured: false,
+        exportedAt: null,
+        sourceUrl: '',
+        cookieCount: 0,
+        acceptedCount: 0,
+        skippedCount: 0,
+        skippedReasons: [],
+        updatedAt: null,
+        runtimeSupported: false
+      },
       exitCode: null,
       signal: null,
       error: '',
@@ -129,11 +142,36 @@ export async function loadScanStatus(): Promise<ScanJobStatus> {
 }
 
 export async function startScanJob(): Promise<{ status: ScanJobStatus }> {
-  return postJson('/api/scan/start');
+  return mutateJson('/api/scan/start', 'POST', 'scan');
 }
 
 export async function stopScanJob(): Promise<{ status: ScanJobStatus }> {
-  return postJson('/api/scan/stop');
+  return mutateJson('/api/scan/stop', 'POST', 'scan');
+}
+
+export async function loadCookieAuthStatus(): Promise<CookieAuthStatus> {
+  if (IS_DEMO) {
+    return {
+      configured: false,
+      exportedAt: null,
+      sourceUrl: '',
+      cookieCount: 0,
+      acceptedCount: 0,
+      skippedCount: 0,
+      skippedReasons: [],
+      updatedAt: null,
+      runtimeSupported: false
+    };
+  }
+  return fetchJson('/api/auth/cookies/status');
+}
+
+export async function importCookieAuth(filename: string, content: string): Promise<CookieAuthStatus> {
+  return mutateJson('/api/auth/cookies/import', 'POST', 'auth', { filename, content });
+}
+
+export async function clearCookieAuth(): Promise<CookieAuthStatus> {
+  return mutateJson('/api/auth/cookies', 'DELETE', 'auth');
 }
 
 export function connectScanEvents(onStatus: (status: ScanJobStatus) => void, onError: (error: Event) => void) {

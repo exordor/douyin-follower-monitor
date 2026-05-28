@@ -39,6 +39,7 @@ http://127.0.0.1:4573
 - SQLite 长期状态：`followers`、`scan_runs`、`follower_events` 三张表记录历史。
 - 中断保护：采集过程中持续写入 `data/in-progress/latest.partial.*`。
 - 本地 Web 仪表盘：趋势图、事件图、状态分布、粉丝/事件/扫描表格。
+- Cookie 登录态导入：支持 cookie-manager 无损 JSON，让 Playwright/CDP 在采集前注入 `douyin.com` cookie。
 - JSON/CSV 双写导出：保留人工查看和脚本兼容能力。
 
 ## 工作原理
@@ -65,11 +66,11 @@ npm run dashboard:dev
 
 采集层通过 runtime adapter 连接已经登录的浏览器。默认 `auto` 规则是：传入 `--browser-app` 时使用 Apple Events；传入 `--cdp-url` 或 `DOUYIN_CDP_URL` 时使用 CDP；否则使用 Playwright 持久 profile。
 
-| Runtime | 适用场景 | 示例 |
-| --- | --- | --- |
-| `playwright` | 跨平台默认入口，使用 `.douyin-browser` 持久 profile，首次运行需要登录 | `npm run monitor` |
-| `cdp` | 连接已开启 remote debugging 的 Chrome/Edge/Chromium | `DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor` |
-| `apple-events` | macOS 复用已登录豆包/Chrome 类浏览器标签页 | `npm run monitor:doubao` |
+| Runtime | 适用场景 | Cookie 导入 | 示例 |
+| --- | --- | --- | --- |
+| `playwright` | 跨平台默认入口，使用 `.douyin-browser` 持久 profile，首次运行需要登录 | 支持 | `npm run monitor` |
+| `cdp` | 连接已开启 remote debugging 的 Chrome/Edge/Chromium | 支持 | `DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor` |
+| `apple-events` | macOS 复用已登录豆包/Chrome 类浏览器标签页 | 不支持，直接复用浏览器登录态 | `npm run monitor:doubao` |
 
 CDP 示例：
 
@@ -87,6 +88,24 @@ DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor
 npm run monitor:doubao
 npm run dashboard:doubao
 ```
+
+## Cookie 登录态
+
+如果你使用 [Local Cookie Manager](https://github.com/exordor/sunbeam-cookie-jar) 导出了抖音 cookie，可以把无损 JSON 用作平台无关登录态。项目只接受 `format: "local-cookie-manager-v1"`，只导入 `douyin.com` 及其子域 cookie，不导入 redacted 文件、过期 cookie 或分区 cookie。
+
+CLI 示例：
+
+```bash
+node scripts/collect-followers.mjs \
+  --runtime playwright \
+  --cookie-file ./cookies-douyin.com.json \
+  --api \
+  --mode monitor
+
+DOUYIN_COOKIE_FILE=./cookies-douyin.com.json npm run monitor
+```
+
+Dashboard 也可以在“采集控制”面板上传 cookie-manager 无损 JSON。文件会保存到本机 `data/auth/douyin-cookies.json`，权限设置为 `0600`，并且 `data/` 默认不会入库。上传和状态 API 不返回 cookie 名称或值，只返回导入数量摘要。
 
 ## 取关判断
 
@@ -135,6 +154,9 @@ npm run dashboard:dev
 - `GET /api/scan/events`
 - `POST /api/scan/start`
 - `POST /api/scan/stop`
+- `GET /api/auth/cookies/status`
+- `POST /api/auth/cookies/import`
+- `DELETE /api/auth/cookies`
 
 自定义路径：
 
@@ -154,6 +176,7 @@ node --disable-warning=ExperimentalWarning scripts/serve-dashboard.mjs \
 - `data/latest-change.json`: 最近一次变化摘要
 - `data/in-progress/latest.partial.json`: 采集中实时进度
 - `data/in-progress/latest.partial.csv`: 采集中实时 CSV
+- `data/auth/douyin-cookies.json`: 本地 cookie-manager 无损 JSON 导入文件
 - `data/snapshots/*.json`: 历史快照
 - `data/changes/*.json`: 历史差异
 
@@ -168,6 +191,7 @@ node --disable-warning=ExperimentalWarning scripts/serve-dashboard.mjs \
 - 不尝试补全隐藏账号。
 - 不绕过登录、风控、签名或隐私限制。
 - 不上传 SQLite、JSON、CSV 或浏览器数据。
+- 不在日志或 API 响应中输出 cookie 名称和值。
 - `hiddenOrUnavailableCount = 主页粉丝数 - 可枚举粉丝数` 仅作为统计差值。
 
 ## 开发

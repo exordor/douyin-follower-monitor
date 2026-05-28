@@ -6,6 +6,12 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
+  defaultCookieFile,
+  getCookieAuthStatus,
+  removeCookieAuthFile,
+  saveCookieAuthFile
+} from './cookie-auth.mjs';
+import {
   DEFAULT_DB,
   DEFAULT_OUT_DIR,
   getDashboardEventDaily,
@@ -46,7 +52,8 @@ function parseArgs(argv) {
     runtime: process.env.DOUYIN_RUNTIME || 'auto',
     profile: process.env.DOUYIN_PROFILE || path.join(ROOT_DIR, '.douyin-browser'),
     cdpUrl: process.env.DOUYIN_CDP_URL || '',
-    browserApp: process.env.DOUYIN_BROWSER_APP || ''
+    browserApp: process.env.DOUYIN_BROWSER_APP || '',
+    cookieFile: process.env.DOUYIN_COOKIE_FILE ? path.resolve(process.env.DOUYIN_COOKIE_FILE) : ''
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -60,6 +67,7 @@ function parseArgs(argv) {
     else if (arg === '--profile') options.profile = path.resolve(argv[++index]);
     else if (arg === '--cdp-url') options.cdpUrl = argv[++index];
     else if (arg === '--browser-app') options.browserApp = argv[++index];
+    else if (arg === '--cookie-file') options.cookieFile = path.resolve(argv[++index]);
     else if (arg === '--help' || arg === '-h') options.help = true;
   }
 
@@ -79,6 +87,7 @@ Options:
   --profile <path>     Playwright profile path (default: .douyin-browser)
   --cdp-url <url>      Chrome DevTools Protocol endpoint
   --browser-app <id>   Browser bundle id used by apple-events runtime, e.g. ${DEFAULT_BROWSER_APP}
+  --cookie-file <path> cookie-manager lossless JSON for playwright/cdp runtime
 `);
 }
 
@@ -126,17 +135,39 @@ function corsHeadersFor(req, allowPost = false) {
   const allowOrigin = origin && isLoopbackOrigin(origin) ? origin : '*';
   return {
     'access-control-allow-origin': allowOrigin,
-    'access-control-allow-methods': allowPost ? 'GET, POST, OPTIONS' : 'GET, OPTIONS',
+    'access-control-allow-methods': allowPost ? 'GET, POST, DELETE, OPTIONS' : 'GET, OPTIONS',
     'access-control-allow-headers': 'content-type, x-douyin-dashboard-action'
   };
 }
 
-function allowedScanPost(req) {
+function allowedDashboardAction(req, expectedAction) {
   const token = req.headers['x-douyin-dashboard-action'];
-  if (token !== 'scan') return false;
+  if (token !== expectedAction) return false;
   const origin = req.headers.origin;
   if (!origin) return true;
   return isLoopbackOrigin(origin);
+}
+
+function readJsonBody(req, maxBytes = 2 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (Buffer.byteLength(body, 'utf8') > maxBytes) {
+        reject(new Error('request-body-too-large'));
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch {
+        reject(new Error('invalid-json-body'));
+      }
+    });
+    req.on('error', reject);
+  });
 }
 
 async function handleScanApi(req, res, url, scanManager) {
@@ -163,7 +194,7 @@ async function handleScanApi(req, res, url, scanManager) {
       sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req, true));
       return true;
     }
-    if (!allowedScanPost(req)) {
+    if (!allowedDashboardAction(req, 'scan')) {
       sendJson(res, 403, { error: 'scan-post-forbidden' }, corsHeadersFor(req, true));
       return true;
     }
@@ -175,11 +206,77 @@ async function handleScanApi(req, res, url, scanManager) {
   return false;
 }
 
+async function handleAuthApi(req, res, url, options, scanManager) {
+  if (!url.pathname.startsWith('/api/auth/cookies')) return false;
+
+  const scanStatus = await scanManager.status();
+  const runtime = scanStatus.runtime || options.runtime || 'auto';
+
+  if (url.pathname !== '/api/auth/cookies/status' && url.pathname !== '/api/auth/cookies/import' && url.pathname !== '/api/auth/cookies') {
+    return false;
+  }
+
+  if (url.pathname === '/api/auth/cookies/status') {
+    if (req.method !== 'GET') {
+      sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req, true));
+      return true;
+    }
+    sendJson(res, 200, await getCookieAuthStatus({ cookieFile: options.cookieFile, runtime }), corsHeadersFor(req));
+    return true;
+  }
+
+  if (url.pathname === '/api/auth/cookies/import') {
+    if (req.method !== 'POST') {
+      sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req, true));
+      return true;
+    }
+    if (!allowedDashboardAction(req, 'auth')) {
+      sendJson(res, 403, { error: 'auth-post-forbidden' }, corsHeadersFor(req, true));
+      return true;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message }, corsHeadersFor(req, true));
+      return true;
+    }
+    if (typeof body.content !== 'string') {
+      sendJson(res, 400, { error: 'cookie-content-required' }, corsHeadersFor(req, true));
+      return true;
+    }
+    const status = await saveCookieAuthFile({ cookieFile: options.cookieFile, content: body.content });
+    status.runtimeSupported = runtime === 'playwright' || runtime === 'cdp';
+    sendJson(res, 200, status, corsHeadersFor(req, true));
+    return true;
+  }
+
+  if (url.pathname === '/api/auth/cookies') {
+    if (req.method !== 'DELETE') {
+      sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req, true));
+      return true;
+    }
+    if (!allowedDashboardAction(req, 'auth')) {
+      sendJson(res, 403, { error: 'auth-post-forbidden' }, corsHeadersFor(req, true));
+      return true;
+    }
+    const status = await removeCookieAuthFile(options.cookieFile);
+    status.runtimeSupported = runtime === 'playwright' || runtime === 'cdp';
+    sendJson(res, 200, status, corsHeadersFor(req, true));
+    return true;
+  }
+
+  return false;
+}
+
 async function handleApi(req, res, url, options, scanManager) {
   const common = { dbPath: options.db, outDir: options.outDir };
 
   if (url.pathname.startsWith('/api/scan/')) {
     return handleScanApi(req, res, url, scanManager);
+  }
+  if (url.pathname.startsWith('/api/auth/cookies')) {
+    return handleAuthApi(req, res, url, options, scanManager);
   }
 
   if (url.pathname === '/api/summary') {
@@ -239,8 +336,10 @@ function createDashboardServer(options = {}) {
     runtime: options.runtime || 'auto',
     profile: options.profile || path.join(ROOT_DIR, '.douyin-browser'),
     cdpUrl: options.cdpUrl || '',
-    browserApp: options.browserApp || ''
+    browserApp: options.browserApp || '',
+    cookieFile: options.cookieFile || ''
   };
+  resolvedOptions.cookieFile = resolvedOptions.cookieFile || defaultCookieFile(resolvedOptions.outDir);
   const scanManager = options.scanManager || createScanJobManager({
     rootDir: ROOT_DIR,
     db: resolvedOptions.db,
@@ -248,22 +347,24 @@ function createDashboardServer(options = {}) {
     runtime: resolvedOptions.runtime,
     profile: resolvedOptions.profile,
     cdpUrl: resolvedOptions.cdpUrl,
-    browserApp: resolvedOptions.browserApp
+    browserApp: resolvedOptions.browserApp,
+    cookieFile: resolvedOptions.cookieFile
   });
 
   return createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${resolvedOptions.host}:${resolvedOptions.port}`);
     const isScanPath = url.pathname.startsWith('/api/scan/');
+    const isAuthPath = url.pathname.startsWith('/api/auth/cookies');
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
-        ...corsHeadersFor(req, isScanPath)
+        ...corsHeadersFor(req, isScanPath || isAuthPath)
       });
       res.end();
       return;
     }
 
-    if (req.method !== 'GET' && !isScanPath) {
+    if (req.method !== 'GET' && !isScanPath && !isAuthPath) {
       sendJson(res, 405, { error: 'method-not-allowed' });
       return;
     }

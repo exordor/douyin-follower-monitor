@@ -5,6 +5,8 @@ import path from 'node:path';
 import process from 'node:process';
 import { promisify } from 'node:util';
 
+import { applyCookieAuthToContext } from './cookie-auth.mjs';
+
 const execFileAsync = promisify(execFile);
 const DEFAULT_TARGET = 'https://www.douyin.com/user/self';
 const DEFAULT_RUNTIME = 'auto';
@@ -31,6 +33,7 @@ function resolveBrowserRuntimeConfig(options = {}, env = process.env) {
   const browserApp = options.browserApp || env.DOUYIN_BROWSER_APP || '';
   const cdpUrl = options.cdpUrl || env.DOUYIN_CDP_URL || '';
   const profile = options.profile || env.DOUYIN_PROFILE || '';
+  const cookieFile = options.cookieFile || env.DOUYIN_COOKIE_FILE || '';
   let runtime = requestedRuntime;
 
   if (runtime === 'auto') {
@@ -45,6 +48,9 @@ function resolveBrowserRuntimeConfig(options = {}, env = process.env) {
   if (runtime === 'cdp' && !cdpUrl) {
     throw new Error('CDP runtime requires --cdp-url or DOUYIN_CDP_URL');
   }
+  if (runtime === 'apple-events' && cookieFile) {
+    throw new Error('Apple Events runtime 不支持 --cookie-file。请改用 --runtime playwright/cdp，或继续复用已登录浏览器。');
+  }
 
   return {
     requestedRuntime,
@@ -52,7 +58,8 @@ function resolveBrowserRuntimeConfig(options = {}, env = process.env) {
     runtimeLabel: RUNTIME_LABELS[runtime],
     browserApp,
     cdpUrl,
-    profile
+    profile,
+    cookieFile
   };
 }
 
@@ -111,6 +118,7 @@ class AppleEventsRuntime {
     this.name = 'apple-events';
     this.label = RUNTIME_LABELS[this.name];
     this.browserApp = config.browserApp;
+    this.cookieAuthSummary = null;
   }
 
   async openOrFocusTarget(target = DEFAULT_TARGET) {
@@ -209,10 +217,13 @@ class PlaywrightRuntime {
     this.name = 'playwright';
     this.label = RUNTIME_LABELS[this.name];
     this.profile = config.profile;
+    this.cookieFile = config.cookieFile;
     this.headless = Boolean(config.headless);
     this.slowMo = config.slowMo ?? 40;
     this.context = null;
     this.page = null;
+    this.cookieAuthSummary = null;
+    this.cookiesApplied = false;
   }
 
   async ensureContext() {
@@ -239,12 +250,22 @@ class PlaywrightRuntime {
     return this.context;
   }
 
+  async applyCookieAuth() {
+    if (this.cookiesApplied) return;
+    this.cookieAuthSummary = await applyCookieAuthToContext(await this.ensureContext(), this.cookieFile);
+    this.cookiesApplied = true;
+  }
+
   async openOrFocusTarget(target = DEFAULT_TARGET) {
     const context = await this.ensureContext();
+    await this.applyCookieAuth();
     const pages = context.pages();
     this.page = pages.find((page) => /douyin\.com/.test(page.url())) || pages[0] || (await context.newPage());
     if (!/douyin\.com/.test(this.page.url())) {
       await this.page.goto(target, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+      await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+    } else if (this.cookieAuthSummary?.configured && this.cookieAuthSummary.acceptedCount > 0) {
+      await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 90_000 }).catch(() => {});
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
     await this.page.bringToFront().catch(() => {});
@@ -287,9 +308,12 @@ class CdpRuntime {
     this.name = 'cdp';
     this.label = RUNTIME_LABELS[this.name];
     this.cdpUrl = config.cdpUrl;
+    this.cookieFile = config.cookieFile;
     this.browser = null;
     this.context = null;
     this.page = null;
+    this.cookieAuthSummary = null;
+    this.cookiesApplied = false;
   }
 
   async ensureConnection() {
@@ -299,12 +323,23 @@ class CdpRuntime {
     this.context = this.browser.contexts()[0] || await this.browser.newContext();
   }
 
+  async applyCookieAuth() {
+    if (this.cookiesApplied) return;
+    await this.ensureConnection();
+    this.cookieAuthSummary = await applyCookieAuthToContext(this.context, this.cookieFile);
+    this.cookiesApplied = true;
+  }
+
   async openOrFocusTarget(target = DEFAULT_TARGET) {
     await this.ensureConnection();
+    await this.applyCookieAuth();
     const pages = this.context.pages();
     this.page = pages.find((page) => /douyin\.com/.test(page.url())) || pages[0] || (await this.context.newPage());
     if (!/douyin\.com/.test(this.page.url())) {
       await this.page.goto(target, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+      await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+    } else if (this.cookieAuthSummary?.configured && this.cookieAuthSummary.acceptedCount > 0) {
+      await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 90_000 }).catch(() => {});
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
     await this.page.bringToFront().catch(() => {});

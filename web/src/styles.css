@@ -293,6 +293,67 @@ a {
   font-size: 13px;
 }
 
+.cookie-auth-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.cookie-auth-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cookie-auth-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.cookie-auth-main span,
+.cookie-auth-main small {
+  display: block;
+  color: #667282;
+  font-size: 12px;
+}
+
+.cookie-auth-main strong {
+  display: block;
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+  color: #15181e;
+  font-size: 13px;
+}
+
+.cookie-auth-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .log-tail {
   display: grid;
   gap: 6px;
@@ -863,6 +924,11 @@ td code,
   .scan-grid,
   .tables {
     grid-template-columns: 1fr;
+  }
+
+  .cookie-auth-card {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .local-card {

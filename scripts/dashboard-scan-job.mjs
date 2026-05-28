@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { resolveBrowserRuntimeConfig } from './browser-runtime.mjs';
+import { defaultCookieFile, getCookieAuthStatus } from './cookie-auth.mjs';
 
 const MAX_LOG_LINES = 120;
 
@@ -32,6 +33,7 @@ function publicJob(job) {
       hiddenOrUnavailableCount: null,
       runtime: 'auto',
       runtimeLabel: '',
+      cookieAuth: null,
       exitCode: null,
       signal: null,
       error: '',
@@ -55,6 +57,7 @@ function publicJob(job) {
     hiddenOrUnavailableCount: job.hiddenOrUnavailableCount,
     runtime: job.runtime,
     runtimeLabel: job.runtimeLabel,
+    cookieAuth: job.cookieAuth || null,
     exitCode: job.exitCode,
     signal: job.signal,
     error: job.error,
@@ -125,6 +128,25 @@ function parseLogLine(job, line) {
       reappearedCount: Number(changeMatch[4]),
       renamedCount: Number(changeMatch[5])
     };
+    return;
+  }
+
+  const cookieMatch = line.match(/^Cookie 登录态:\s*已导入\s*(\d+)\/(\d+)，跳过\s*(\d+)(?:；跳过原因:\s*(.+))?/);
+  if (cookieMatch) {
+    job.cookieAuth = {
+      configured: true,
+      acceptedCount: Number(cookieMatch[1]),
+      cookieCount: Number(cookieMatch[2]),
+      skippedCount: Number(cookieMatch[3]),
+      skippedReasons: (cookieMatch[4] || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => {
+          const [reason, count] = item.split('=');
+          return { reason, count: Number(count || 0) };
+        })
+    };
   }
 }
 
@@ -156,6 +178,7 @@ function partialSummaryFromSnapshot(partial) {
     reason: partial.reason || '',
     runtime: partial.runtime || '',
     runtimeLabel: partial.runtimeLabel || '',
+    cookieAuth: partial.cookieAuth || null,
     pagesFetched: partial.pagesFetched || 0,
     count: partial.count || 0,
     scanComplete: partial.scanComplete ?? null,
@@ -172,15 +195,14 @@ function partialMatchesJob(partialSummary, startedAt, status) {
 
 function mergePartialIntoStatus(status, partialSummary) {
   status.partial = partialSummary;
-  if (status.status !== 'idle') {
-    status.pagesFetched = Math.max(status.pagesFetched || 0, partialSummary.pagesFetched || 0);
-    status.count = Math.max(status.count || 0, partialSummary.count || 0);
-    status.profileFollowerCount = status.profileFollowerCount ?? partialSummary.profileFollowerCount;
-    if (partialSummary.reason && !status.reason) status.reason = partialSummary.reason;
-    if (partialSummary.mode && (!status.mode || status.mode === 'monitor')) status.mode = partialSummary.mode;
-    if (partialSummary.runtime) status.runtime = partialSummary.runtime;
-    if (partialSummary.runtimeLabel) status.runtimeLabel = partialSummary.runtimeLabel;
-  }
+  status.pagesFetched = Math.max(status.pagesFetched || 0, partialSummary.pagesFetched || 0);
+  status.count = Math.max(status.count || 0, partialSummary.count || 0);
+  status.profileFollowerCount = status.profileFollowerCount ?? partialSummary.profileFollowerCount;
+  if (partialSummary.reason && !status.reason) status.reason = partialSummary.reason;
+  if (partialSummary.mode && (!status.mode || status.mode === 'monitor')) status.mode = partialSummary.mode;
+  if (partialSummary.runtime) status.runtime = partialSummary.runtime;
+  if (partialSummary.runtimeLabel) status.runtimeLabel = partialSummary.runtimeLabel;
+  if (partialSummary.cookieAuth) status.cookieAuth = partialSummary.cookieAuth;
 }
 
 function createScanJobManager({
@@ -191,6 +213,7 @@ function createScanJobManager({
   profile,
   cdpUrl = process.env.DOUYIN_CDP_URL || '',
   browserApp = process.env.DOUYIN_BROWSER_APP || '',
+  cookieFile = process.env.DOUYIN_COOKIE_FILE || defaultCookieFile(outDir),
   collectorPath = path.join(rootDir, 'scripts', 'collect-followers.mjs'),
   nodePath = process.execPath,
   spawnImpl = defaultSpawn
@@ -199,7 +222,11 @@ function createScanJobManager({
   const clients = new Set();
   let currentJob = null;
   let lastJob = null;
-  const runtimeConfig = resolveBrowserRuntimeConfig({ runtime, profile, cdpUrl, browserApp });
+  const runtimeConfig = resolveBrowserRuntimeConfig(
+    { runtime, profile, cdpUrl, browserApp, cookieFile: '' },
+    { ...process.env, DOUYIN_COOKIE_FILE: '' }
+  );
+  const supportsCookieAuth = runtimeConfig.runtime === 'playwright' || runtimeConfig.runtime === 'cdp';
 
   function isActive(job) {
     return job && ['starting', 'running', 'stopping'].includes(job.status);
@@ -228,6 +255,10 @@ function createScanJobManager({
       status.runtime = runtimeConfig.runtime;
       status.runtimeLabel = runtimeConfig.runtimeLabel;
     }
+    status.cookieAuth = await getCookieAuthStatus({
+      cookieFile,
+      runtime: runtimeConfig.runtime
+    });
     return status;
   }
 
@@ -254,6 +285,7 @@ function createScanJobManager({
       hiddenOrUnavailableCount: null,
       runtime: runtimeConfig.runtime,
       runtimeLabel: runtimeConfig.runtimeLabel,
+      cookieAuth: await getCookieAuthStatus({ cookieFile, runtime: runtimeConfig.runtime }),
       exitCode: null,
       signal: null,
       error: '',
@@ -284,10 +316,14 @@ function createScanJobManager({
     if (runtimeConfig.profile) args.push('--profile', runtimeConfig.profile);
     if (runtimeConfig.cdpUrl) args.push('--cdp-url', runtimeConfig.cdpUrl);
     if (runtimeConfig.browserApp) args.push('--browser-app', runtimeConfig.browserApp);
+    if (supportsCookieAuth && job.cookieAuth?.configured) args.push('--cookie-file', cookieFile);
+
+    const childEnv = { ...process.env, DOUYIN_COOKIE_FILE: '' };
+    if (supportsCookieAuth && job.cookieAuth?.configured) childEnv.DOUYIN_COOKIE_FILE = cookieFile;
 
     const child = spawnImpl(nodePath, args, {
       cwd: rootDir,
-      env: process.env,
+      env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -330,6 +366,7 @@ function createScanJobManager({
         job.reason = latestSnapshot.reason || job.reason;
         job.runtime = latestSnapshot.runtime || job.runtime;
         job.runtimeLabel = latestSnapshot.runtimeLabel || job.runtimeLabel;
+        job.cookieAuth = latestSnapshot.cookieAuth || job.cookieAuth;
       }
 
       const latestChange = await readJsonIfExists(path.join(outDir, 'latest-change.json'));

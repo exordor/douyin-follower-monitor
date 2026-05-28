@@ -110,6 +110,7 @@ export interface ScanJobPartial {
   reason: string;
   runtime: string;
   runtimeLabel: string;
+  cookieAuth: CookieAuthStatus | null;
   pagesFetched: number;
   count: number;
   scanComplete: boolean | null;
@@ -123,6 +124,19 @@ export interface ScanJobChangeSummary {
   reappearedCount: number;
   renamedCount: number;
   hiddenOrUnavailableCount?: number | null;
+}
+
+export interface CookieAuthStatus {
+  configured: boolean;
+  exportedAt: string | null;
+  sourceUrl: string;
+  cookieCount: number;
+  acceptedCount: number;
+  skippedCount: number;
+  skippedReasons?: Array<{ reason: string; count: number }>;
+  updatedAt: string | null;
+  runtimeSupported: boolean;
+  error?: string;
 }
 
 export interface ScanJobStatus {
@@ -139,6 +153,7 @@ export interface ScanJobStatus {
   hiddenOrUnavailableCount: number | null;
   runtime: string;
   runtimeLabel: string;
+  cookieAuth: CookieAuthStatus | null;
   exitCode: number | null;
   signal: string | null;
   error: string;
