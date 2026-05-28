@@ -106,10 +106,10 @@ function toPlaywrightCookie(cookie, nowSeconds, skipped, targetHost = 'www.douyi
   }
 
   const normalizedDomain = normalizeCookieDomain(cookie.domain);
+  const cookiePath = normalizePath(cookie.path);
   const output = {
     name: cookie.name,
     value: cookie.value,
-    path: normalizePath(cookie.path),
     httpOnly: Boolean(cookie.httpOnly),
     secure: Boolean(cookie.secure)
   };
@@ -119,8 +119,9 @@ function toPlaywrightCookie(cookie, nowSeconds, skipped, targetHost = 'www.douyi
 
   if (cookie.hostOnly) {
     const protocol = output.secure ? 'https' : 'http';
-    output.url = `${protocol}://${normalizedDomain}${output.path}`;
+    output.url = `${protocol}://${normalizedDomain}${cookiePath}`;
   } else {
+    output.path = cookiePath;
     output.domain = String(cookie.domain).trim().startsWith('.') ? String(cookie.domain).trim() : `.${normalizedDomain}`;
   }
 

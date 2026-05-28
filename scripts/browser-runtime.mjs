@@ -76,6 +76,24 @@ function parseJsonOutput(output) {
   }
 }
 
+function isDouyinUrl(value) {
+  try {
+    return /(^|\.)douyin\.com$/.test(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isTargetPageUrl(value, target = DEFAULT_TARGET) {
+  try {
+    const url = new URL(value);
+    const targetUrl = new URL(target);
+    return url.hostname === targetUrl.hostname && url.pathname === targetUrl.pathname;
+  } catch {
+    return false;
+  }
+}
+
 async function evaluateWithMainWorldBridge(evaluateJavascript, expression, { timeoutMs = 30_000, pollMs = 250 } = {}) {
   const key = `data-douyin-main-world-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const mainCode = `(() => {
@@ -260,13 +278,16 @@ class PlaywrightRuntime {
     const context = await this.ensureContext();
     await this.applyCookieAuth();
     const pages = context.pages();
-    this.page = pages.find((page) => /douyin\.com/.test(page.url())) || pages[0] || (await context.newPage());
-    if (!/douyin\.com/.test(this.page.url())) {
+    this.page = pages.find((page) => isTargetPageUrl(page.url(), target)) ||
+      pages.find((page) => isDouyinUrl(page.url())) ||
+      pages[0] ||
+      (await context.newPage());
+    if (!isTargetPageUrl(this.page.url(), target)) {
       await this.page.goto(target, { waitUntil: 'domcontentloaded', timeout: 90_000 });
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
     await this.page.bringToFront().catch(() => {});
-    return /douyin\.com/.test(this.page.url()) ? 'found' : 'opened';
+    return isTargetPageUrl(this.page.url(), target) ? 'found' : 'opened';
   }
 
   async evaluateJson(expression) {
@@ -331,13 +352,16 @@ class CdpRuntime {
     await this.ensureConnection();
     await this.applyCookieAuth();
     const pages = this.context.pages();
-    this.page = pages.find((page) => /douyin\.com/.test(page.url())) || pages[0] || (await this.context.newPage());
-    if (!/douyin\.com/.test(this.page.url())) {
+    this.page = pages.find((page) => isTargetPageUrl(page.url(), target)) ||
+      pages.find((page) => isDouyinUrl(page.url())) ||
+      pages[0] ||
+      (await this.context.newPage());
+    if (!isTargetPageUrl(this.page.url(), target)) {
       await this.page.goto(target, { waitUntil: 'domcontentloaded', timeout: 90_000 });
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
     await this.page.bringToFront().catch(() => {});
-    return /douyin\.com/.test(this.page.url()) ? 'found' : 'opened';
+    return isTargetPageUrl(this.page.url(), target) ? 'found' : 'opened';
   }
 
   async evaluateJson(expression) {

@@ -193,6 +193,12 @@ function partialMatchesJob(partialSummary, startedAt, status) {
   return Boolean(partialTime && startedTime && partialTime >= startedTime - 2000);
 }
 
+function snapshotMatchesJob(snapshot, startedAt) {
+  const snapshotTime = snapshot?.collectedAt ? Date.parse(snapshot.collectedAt) : 0;
+  const startedTime = startedAt ? Date.parse(startedAt) : 0;
+  return Boolean(snapshotTime && startedTime && snapshotTime >= startedTime - 2000);
+}
+
 function mergePartialIntoStatus(status, partialSummary) {
   status.partial = partialSummary;
   status.pagesFetched = Math.max(status.pagesFetched || 0, partialSummary.pagesFetched || 0);
@@ -358,7 +364,7 @@ function createScanJobManager({
       }
 
       const latestSnapshot = await readJsonIfExists(path.join(outDir, 'latest.json'));
-      if (latestSnapshot) {
+      if (latestSnapshot && snapshotMatchesJob(latestSnapshot, job.startedAt)) {
         job.count = latestSnapshot.count ?? job.count;
         job.profileFollowerCount = latestSnapshot.profileStats?.followers ?? job.profileFollowerCount;
         job.hiddenOrUnavailableCount = latestSnapshot.hiddenOrUnavailableCount ?? job.hiddenOrUnavailableCount;

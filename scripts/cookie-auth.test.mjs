@@ -130,6 +130,7 @@ assert.deepEqual(parsed.cookies[0], {
   domain: '.douyin.com'
 });
 assert.equal(parsed.cookies[1].url, 'https://www.douyin.com/');
+assert.equal('path' in parsed.cookies[1], false);
 assert.equal(parsed.cookies[1].sameSite, 'Lax');
 assert.equal(parsed.cookies[2].sameSite, 'Strict');
 
