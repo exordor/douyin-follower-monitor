@@ -5,6 +5,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || '';
 const IS_DEMO = import.meta.env.MODE === 'demo';
 
 type Params = Record<string, string | number | undefined>;
+const DEFAULT_PAGE_LIMIT = 50;
 
 function withParams(path: string, params: Params = {}) {
   const url = new URL(path, API_BASE || window.location.origin);
@@ -25,6 +26,8 @@ function filterFollowers(params: Params = {}): Page<Follower> {
   const page = mockData.followers as Page<Follower>;
   const status = params.status as FollowerStatus | undefined;
   const query = String(params.q || '').trim().toLowerCase();
+  const limit = Number(params.limit || page.limit || DEFAULT_PAGE_LIMIT);
+  const offset = Number(params.offset || 0);
   const rows = page.rows.filter((row) => {
     if (status && row.status !== status) return false;
     if (!query) return true;
@@ -32,9 +35,9 @@ function filterFollowers(params: Params = {}): Page<Follower> {
   });
   return {
     total: rows.length,
-    limit: Number(params.limit || page.limit),
-    offset: Number(params.offset || 0),
-    rows
+    limit,
+    offset,
+    rows: rows.slice(offset, offset + limit)
   };
 }
 
@@ -42,6 +45,8 @@ function filterEvents(params: Params = {}): Page<FollowerEvent> {
   const page = mockData.events as Page<FollowerEvent>;
   const type = params.type as EventType | undefined;
   const query = String(params.q || '').trim().toLowerCase();
+  const limit = Number(params.limit || page.limit || DEFAULT_PAGE_LIMIT);
+  const offset = Number(params.offset || 0);
   const rows = page.rows.filter((row) => {
     if (type && row.type !== type) return false;
     if (!query) return true;
@@ -49,9 +54,9 @@ function filterEvents(params: Params = {}): Page<FollowerEvent> {
   });
   return {
     total: rows.length,
-    limit: Number(params.limit || page.limit),
-    offset: Number(params.offset || 0),
-    rows
+    limit,
+    offset,
+    rows: rows.slice(offset, offset + limit)
   };
 }
 
@@ -63,8 +68,8 @@ export async function loadOverview(): Promise<OverviewData> {
     fetchJson('/api/timeline', { days: 30 }),
     fetchJson('/api/event-daily', { days: 30 }),
     fetchJson('/api/runs', { limit: 20 }),
-    fetchJson('/api/followers', { limit: 20 }),
-    fetchJson('/api/events', { limit: 20 })
+    fetchJson('/api/followers', { limit: DEFAULT_PAGE_LIMIT }),
+    fetchJson('/api/events', { limit: DEFAULT_PAGE_LIMIT })
   ]);
 
   return { summary, timeline, eventDaily, runs, followers, events } as OverviewData;
@@ -72,12 +77,12 @@ export async function loadOverview(): Promise<OverviewData> {
 
 export async function loadFollowers(params: Params = {}): Promise<Page<Follower>> {
   if (IS_DEMO) return filterFollowers(params);
-  return fetchJson('/api/followers', { limit: 20, ...params });
+  return fetchJson('/api/followers', { limit: DEFAULT_PAGE_LIMIT, ...params });
 }
 
 export async function loadEvents(params: Params = {}): Promise<Page<FollowerEvent>> {
   if (IS_DEMO) return filterEvents(params);
-  return fetchJson('/api/events', { limit: 20, ...params });
+  return fetchJson('/api/events', { limit: DEFAULT_PAGE_LIMIT, ...params });
 }
 
 export function exportUrl(name: 'latest.json' | 'latest.csv') {

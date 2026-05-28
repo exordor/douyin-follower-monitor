@@ -10,7 +10,7 @@ const DEFAULT_OUT_DIR = path.join(ROOT_DIR, 'data');
 const EVENT_TYPES = new Set(['new', 'seen', 'suspected_removed', 'removed', 'reappeared', 'renamed']);
 const FOLLOWER_STATUSES = new Set(['active', 'suspected_removed', 'removed']);
 
-function clampLimit(value, fallback = 100, max = 500) {
+function clampLimit(value, fallback = 100, max = 5000) {
   const number = Number.parseInt(value, 10);
   if (!Number.isFinite(number) || number <= 0) return fallback;
   return Math.min(number, max);

@@ -566,6 +566,60 @@ select {
   max-width: 100%;
 }
 
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
+}
+
+.page-range {
+  color: #667282;
+  font-size: 13px;
+}
+
+.pagination-controls,
+.page-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-size {
+  color: #667282;
+  font-size: 13px;
+}
+
+.page-size select {
+  width: 86px;
+}
+
+.button.compact {
+  height: 32px;
+  padding: 0 10px;
+}
+
+.button:disabled,
+.icon-button:disabled {
+  cursor: not-allowed;
+  color: #9aa5b4;
+  background: #f0f3f7;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  color: #26313e;
+  background: #ffffff;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -772,5 +826,20 @@ td code,
   .button {
     width: 100%;
     justify-content: center;
+  }
+
+  .pagination-bar,
+  .pagination-controls {
+    display: grid;
+    width: 100%;
+  }
+
+  .page-size,
+  .page-size select {
+    width: 100%;
+  }
+
+  .icon-button {
+    width: 100%;
   }
 }

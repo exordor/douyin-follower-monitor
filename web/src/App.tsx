@@ -3,6 +3,10 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   CheckCircle2,
   CircleDot,
   Clock3,
@@ -48,6 +52,9 @@ const MODE_LABELS: Record<string, string> = {
   recent: '轻量',
   full: '全量'
 };
+
+const DEFAULT_PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500];
 
 function formatNumber(value: number | null | undefined) {
   if (!Number.isFinite(Number(value))) return '-';
@@ -106,8 +113,12 @@ function App() {
   const [error, setError] = useState('');
   const [followerStatus, setFollowerStatus] = useState('');
   const [followerQuery, setFollowerQuery] = useState('');
+  const [followerLimit, setFollowerLimit] = useState(DEFAULT_PAGE_SIZE);
+  const [followerOffset, setFollowerOffset] = useState(0);
   const [eventType, setEventType] = useState('');
   const [eventQuery, setEventQuery] = useState('');
+  const [eventLimit, setEventLimit] = useState(DEFAULT_PAGE_SIZE);
+  const [eventOffset, setEventOffset] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -134,7 +145,7 @@ function App() {
 
   useEffect(() => {
     let alive = true;
-    loadFollowers({ status: followerStatus, q: followerQuery, limit: 20 })
+    loadFollowers({ status: followerStatus, q: followerQuery, limit: followerLimit, offset: followerOffset })
       .then((page) => {
         if (alive) setFollowers(page);
       })
@@ -144,11 +155,11 @@ function App() {
     return () => {
       alive = false;
     };
-  }, [followerStatus, followerQuery]);
+  }, [followerStatus, followerQuery, followerLimit, followerOffset]);
 
   useEffect(() => {
     let alive = true;
-    loadEvents({ type: eventType, q: eventQuery, limit: 20 })
+    loadEvents({ type: eventType, q: eventQuery, limit: eventLimit, offset: eventOffset })
       .then((page) => {
         if (alive) setEvents(page);
       })
@@ -158,7 +169,7 @@ function App() {
     return () => {
       alive = false;
     };
-  }, [eventType, eventQuery]);
+  }, [eventType, eventQuery, eventLimit, eventOffset]);
 
   const cards = useMemo(() => (data ? metricCards(data) : []), [data]);
 
@@ -284,17 +295,39 @@ function App() {
               count={events?.total || 0}
               controls={(
                 <>
-                  <select value={eventType} onChange={(event) => setEventType(event.target.value)}>
+                  <select
+                    value={eventType}
+                    onChange={(event) => {
+                      setEventType(event.target.value);
+                      setEventOffset(0);
+                    }}
+                  >
                     <option value="">全部事件</option>
                     {Object.entries(EVENT_LABELS).map(([value, label]) => (
                       <option value={value} key={value}>{label}</option>
                     ))}
                   </select>
-                  <SearchBox value={eventQuery} onChange={setEventQuery} placeholder="搜索昵称或 ID" />
+                  <SearchBox
+                    value={eventQuery}
+                    onChange={(value) => {
+                      setEventQuery(value);
+                      setEventOffset(0);
+                    }}
+                    placeholder="搜索昵称或 ID"
+                  />
                 </>
               )}
             />
             <EventsTable events={events?.rows || []} />
+            <PaginationBar
+              page={events}
+              pageSize={eventLimit}
+              onOffsetChange={setEventOffset}
+              onPageSizeChange={(value) => {
+                setEventLimit(value);
+                setEventOffset(0);
+              }}
+            />
           </article>
 
           <article className="panel table-panel" id="followers">
@@ -304,17 +337,39 @@ function App() {
               count={followers?.total || 0}
               controls={(
                 <>
-                  <select value={followerStatus} onChange={(event) => setFollowerStatus(event.target.value)}>
+                  <select
+                    value={followerStatus}
+                    onChange={(event) => {
+                      setFollowerStatus(event.target.value);
+                      setFollowerOffset(0);
+                    }}
+                  >
                     <option value="">全部状态</option>
                     {Object.entries(STATUS_LABELS).map(([value, label]) => (
                       <option value={value} key={value}>{label}</option>
                     ))}
                   </select>
-                  <SearchBox value={followerQuery} onChange={setFollowerQuery} placeholder="搜索昵称 / uid" />
+                  <SearchBox
+                    value={followerQuery}
+                    onChange={(value) => {
+                      setFollowerQuery(value);
+                      setFollowerOffset(0);
+                    }}
+                    placeholder="搜索昵称 / uid"
+                  />
                 </>
               )}
             />
             <FollowersTable followers={followers?.rows || []} />
+            <PaginationBar
+              page={followers}
+              pageSize={followerLimit}
+              onOffsetChange={setFollowerOffset}
+              onPageSizeChange={(value) => {
+                setFollowerLimit(value);
+                setFollowerOffset(0);
+              }}
+            />
           </article>
         </section>
 
@@ -334,6 +389,65 @@ function PanelHeader({ icon: Icon, title, subtitle }: { icon: LucideIcon; title:
       <div>
         <h2>{title}</h2>
         <p>{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function PaginationBar<T>({
+  page,
+  pageSize,
+  onOffsetChange,
+  onPageSizeChange
+}: {
+  page: Page<T> | null;
+  pageSize: number;
+  onOffsetChange: (offset: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}) {
+  if (!page) return null;
+
+  const total = page.total;
+  const shown = page.rows.length;
+  const start = total === 0 ? 0 : page.offset + 1;
+  const end = total === 0 ? 0 : Math.min(page.offset + shown, total);
+  const lastOffset = total === 0 ? 0 : Math.floor((total - 1) / page.limit) * page.limit;
+  const canPrev = page.offset > 0;
+  const canNext = end < total;
+  const allLimit = Math.min(total || DEFAULT_PAGE_SIZE, 5000);
+
+  return (
+    <div className="pagination-bar">
+      <span className="page-range">
+        当前显示 {formatNumber(start)}-{formatNumber(end)} / 共 {formatNumber(total)} 条
+      </span>
+      <div className="pagination-controls">
+        <label className="page-size">
+          每页
+          <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>
+            {PAGE_SIZE_OPTIONS.map((value) => (
+              <option value={value} key={value}>{value}</option>
+            ))}
+            {!PAGE_SIZE_OPTIONS.includes(pageSize) && (
+              <option value={pageSize}>{pageSize}</option>
+            )}
+          </select>
+        </label>
+        <button className="button compact" type="button" disabled={shown >= total} onClick={() => onPageSizeChange(allLimit)}>
+          显示全部
+        </button>
+        <button className="icon-button" type="button" disabled={!canPrev} onClick={() => onOffsetChange(0)} aria-label="第一页" title="第一页">
+          <ChevronsLeft size={16} />
+        </button>
+        <button className="icon-button" type="button" disabled={!canPrev} onClick={() => onOffsetChange(Math.max(0, page.offset - page.limit))} aria-label="上一页" title="上一页">
+          <ChevronLeft size={16} />
+        </button>
+        <button className="icon-button" type="button" disabled={!canNext} onClick={() => onOffsetChange(Math.min(lastOffset, page.offset + page.limit))} aria-label="下一页" title="下一页">
+          <ChevronRight size={16} />
+        </button>
+        <button className="icon-button" type="button" disabled={!canNext} onClick={() => onOffsetChange(lastOffset)} aria-label="最后一页" title="最后一页">
+          <ChevronsRight size={16} />
+        </button>
       </div>
     </div>
   );
