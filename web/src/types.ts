@@ -99,3 +99,46 @@ export interface OverviewData {
   followers: Page<Follower>;
   events: Page<FollowerEvent>;
 }
+
+export type ScanJobState = 'idle' | 'starting' | 'running' | 'stopping' | 'completed' | 'failed' | 'interrupted';
+
+export interface ScanJobPartial {
+  collectedAt: string | null;
+  status: string;
+  mode: string;
+  requestedMode: string;
+  reason: string;
+  pagesFetched: number;
+  count: number;
+  scanComplete: boolean | null;
+  profileFollowerCount: number | null;
+}
+
+export interface ScanJobChangeSummary {
+  newCount: number;
+  suspectedRemovedCount: number;
+  removedCount: number;
+  reappearedCount: number;
+  renamedCount: number;
+  hiddenOrUnavailableCount?: number | null;
+}
+
+export interface ScanJobStatus {
+  id: string | null;
+  status: ScanJobState;
+  mode: string;
+  requestedMode: string;
+  reason: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  pagesFetched: number;
+  count: number;
+  profileFollowerCount: number | null;
+  hiddenOrUnavailableCount: number | null;
+  exitCode: number | null;
+  signal: string | null;
+  error: string;
+  logLines: string[];
+  changeSummary: ScanJobChangeSummary | null;
+  partial: ScanJobPartial | null;
+}

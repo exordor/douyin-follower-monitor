@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -17,20 +17,21 @@ import {
   Filter,
   GitBranch,
   History,
+  Play,
   RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
-  Terminal,
+  Square,
   UserMinus,
   UserPlus,
   type LucideIcon
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { exportUrl, isDemoMode, loadEvents, loadFollowers, loadOverview } from './api';
+import { connectScanEvents, exportUrl, isDemoMode, loadEvents, loadFollowers, loadOverview, loadScanStatus, startScanJob, stopScanJob } from './api';
 import { EventBars, StatusDonut, TrendChart } from './components/Charts';
-import type { EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, ScanRun } from './types';
+import type { EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, ScanJobStatus, ScanRun } from './types';
 
 const EVENT_LABELS: Record<EventType, string> = {
   new: '新增',
@@ -55,6 +56,7 @@ const MODE_LABELS: Record<string, string> = {
 
 const DEFAULT_PAGE_SIZE = 50;
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500];
+const ACTIVE_SCAN_STATUSES = new Set(['starting', 'running', 'stopping']);
 
 function formatNumber(value: number | null | undefined) {
   if (!Number.isFinite(Number(value))) return '-';
@@ -119,6 +121,11 @@ function App() {
   const [eventQuery, setEventQuery] = useState('');
   const [eventLimit, setEventLimit] = useState(DEFAULT_PAGE_SIZE);
   const [eventOffset, setEventOffset] = useState(0);
+  const [scanStatus, setScanStatus] = useState<ScanJobStatus | null>(null);
+  const [scanActionError, setScanActionError] = useState('');
+  const [scanBusy, setScanBusy] = useState(false);
+  const previousScanStateRef = useRef('');
+  const refreshAfterScanRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     let alive = true;
@@ -171,7 +178,77 @@ function App() {
     };
   }, [eventType, eventQuery, eventLimit, eventOffset]);
 
+  const refreshAfterScan = useCallback(async () => {
+    const [overview, followerPage, eventPage] = await Promise.all([
+      loadOverview(),
+      loadFollowers({ status: followerStatus, q: followerQuery, limit: followerLimit, offset: followerOffset }),
+      loadEvents({ type: eventType, q: eventQuery, limit: eventLimit, offset: eventOffset })
+    ]);
+    setData(overview);
+    setFollowers(followerPage);
+    setEvents(eventPage);
+  }, [eventLimit, eventOffset, eventQuery, eventType, followerLimit, followerOffset, followerQuery, followerStatus]);
+
+  useEffect(() => {
+    refreshAfterScanRef.current = refreshAfterScan;
+  }, [refreshAfterScan]);
+
+  useEffect(() => {
+    if (isDemoMode) {
+      loadScanStatus().then(setScanStatus).catch(() => {});
+      return undefined;
+    }
+
+    let alive = true;
+    loadScanStatus()
+      .then((status) => {
+        if (!alive) return;
+        previousScanStateRef.current = status.status;
+        setScanStatus(status);
+      })
+      .catch((err) => {
+        if (alive) setScanActionError(err instanceof Error ? err.message : String(err));
+      });
+
+    const disconnect = connectScanEvents((status) => {
+      if (!alive) return;
+      const previous = previousScanStateRef.current;
+      const wasActive = ACTIVE_SCAN_STATUSES.has(previous);
+      const isFinished = ['completed', 'failed', 'interrupted'].includes(status.status);
+      previousScanStateRef.current = status.status;
+      setScanStatus(status);
+      setScanActionError('');
+      if (wasActive && isFinished) {
+        refreshAfterScanRef.current().catch((err) => setScanActionError(err instanceof Error ? err.message : String(err)));
+      }
+    }, () => {
+      if (alive) setScanActionError('实时采集连接已断开，页面会继续显示最后一次状态。');
+    });
+
+    return () => {
+      alive = false;
+      disconnect();
+    };
+  }, []);
+
+  const handleScanAction = async () => {
+    if (isDemoMode) return;
+    setScanBusy(true);
+    setScanActionError('');
+    try {
+      const running = scanStatus && ACTIVE_SCAN_STATUSES.has(scanStatus.status);
+      const result = running ? await stopScanJob() : await startScanJob();
+      previousScanStateRef.current = result.status.status;
+      setScanStatus(result.status);
+    } catch (err) {
+      setScanActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScanBusy(false);
+    }
+  };
+
   const cards = useMemo(() => (data ? metricCards(data) : []), [data]);
+  const scanRunning = Boolean(scanStatus && ACTIVE_SCAN_STATUSES.has(scanStatus.status));
 
   if (loading) {
     return (
@@ -212,8 +289,8 @@ function App() {
         </nav>
         <div className="local-card">
           <ShieldCheck size={20} />
-          <strong>本地只读</strong>
-          <span>{isDemoMode ? '当前是公开演示数据。' : '数据仅来自本机 SQLite。'}</span>
+          <strong>本地控制</strong>
+          <span>{isDemoMode ? '当前是公开演示数据。' : '采集与数据都留在本机。'}</span>
         </div>
       </aside>
 
@@ -230,7 +307,10 @@ function App() {
             <a className={`button ghost ${isDemoMode ? 'disabled' : ''}`} href={exportUrl('latest.csv')}>
               <Download size={16} /> CSV
             </a>
-            <code className="command"><Terminal size={16} />npm run monitor:doubao</code>
+            <button className={`button primary ${scanRunning ? 'danger' : ''}`} type="button" onClick={handleScanAction} disabled={isDemoMode || scanBusy}>
+              {scanRunning ? <Square size={16} /> : <Play size={16} />}
+              {scanRunning ? '中止采集' : '启动采集'}
+            </button>
           </div>
         </header>
 
@@ -245,6 +325,15 @@ function App() {
           <Database size={18} />
           <span>只统计当前账号可枚举的粉丝列表；隐藏或不可用账号只作为数量差值展示，不尝试补全。</span>
         </section>
+
+        <ScanControlPanel
+          status={scanStatus}
+          error={scanActionError}
+          isDemo={isDemoMode}
+          running={scanRunning}
+          busy={scanBusy}
+          onAction={handleScanAction}
+        />
 
         <section className="metrics" id="overview">
           {cards.map((card) => {
@@ -391,6 +480,74 @@ function PanelHeader({ icon: Icon, title, subtitle }: { icon: LucideIcon; title:
         <p>{subtitle}</p>
       </div>
     </div>
+  );
+}
+
+function ScanControlPanel({
+  status,
+  error,
+  isDemo,
+  running,
+  busy,
+  onAction
+}: {
+  status: ScanJobStatus | null;
+  error: string;
+  isDemo: boolean;
+  running: boolean;
+  busy: boolean;
+  onAction: () => void;
+}) {
+  const hasStatus = Boolean(status);
+  const logs = status?.logLines.slice(-8) || [];
+  const change = status?.changeSummary;
+  const partialText = status?.partial
+    ? `${formatDate(status.partial.collectedAt)} 保存 ${formatNumber(status.partial.count)} 条`
+    : '等待采集进度';
+
+  return (
+    <section className={`panel scan-panel ${running ? 'active' : ''}`}>
+      <div className="scan-panel-header">
+        <PanelHeader
+          icon={RefreshCw}
+          title="采集控制"
+          subtitle={isDemo ? '公开演示不连接本地浏览器' : '默认使用 monitor 自动决策 recent/full'}
+        />
+        <button className={`button primary ${running ? 'danger' : ''}`} type="button" onClick={onAction} disabled={isDemo || busy}>
+          {running ? <Square size={16} /> : <Play size={16} />}
+          {running ? '中止采集' : '启动采集'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="scan-error">
+          <AlertTriangle size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="scan-grid">
+        <div><span>状态</span><strong>{hasStatus ? <StatusPill value={status!.status} /> : '-'}</strong></div>
+        <div><span>模式</span><strong>{MODE_LABELS[status?.mode || 'monitor'] || status?.mode || '自动'}</strong></div>
+        <div><span>原因</span><strong>{status?.reason || '-'}</strong></div>
+        <div><span>页面</span><strong>{formatNumber(status?.pagesFetched || 0)}</strong></div>
+        <div><span>累计</span><strong>{formatNumber(status?.count || 0)}</strong></div>
+        <div><span>主页粉丝</span><strong>{formatNumber(status?.profileFollowerCount)}</strong></div>
+        <div><span>Partial</span><strong>{partialText}</strong></div>
+        <div><span>结束</span><strong>{formatDate(status?.finishedAt)}</strong></div>
+      </div>
+
+      {change && (
+        <div className="scan-summary">
+          <span>完成摘要</span>
+          <strong>新增 {formatNumber(change.newCount)} · 疑似 {formatNumber(change.suspectedRemovedCount)} · 确认 {formatNumber(change.removedCount)} · 改名 {formatNumber(change.renamedCount)} · 隐藏差值 {formatNumber(change.hiddenOrUnavailableCount)}</strong>
+        </div>
+      )}
+
+      <div className="log-tail" aria-label="采集日志">
+        {logs.length ? logs.map((line, index) => <code key={`${line}-${index}`}>{line}</code>) : <code>{isDemo ? 'Demo 模式不运行本地采集。' : '点击“启动采集”后这里会显示实时进度。'}</code>}
+      </div>
+    </section>
   );
 }
 

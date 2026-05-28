@@ -119,7 +119,7 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
   const consoleErrors = trackConsoleErrors(page);
-  await page.goto(`http://127.0.0.1:${port}`, { waitUntil: 'networkidle' });
+  await page.goto(`http://127.0.0.1:${port}`, { waitUntil: 'domcontentloaded' });
   assert.deepEqual(consoleErrors, []);
   await expectText(page, '粉丝变化仪表盘');
   await expectText(page, '可枚举粉丝');
@@ -130,7 +130,7 @@ try {
   assert.equal(await page.locator('table').count() >= 3, true);
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expectText(page, '粉丝变化仪表盘');
   assert.equal(await page.locator('body').evaluate((body) => body.scrollWidth <= window.innerWidth + 2), true);
 } finally {

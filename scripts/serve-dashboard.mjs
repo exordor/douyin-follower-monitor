@@ -16,9 +16,11 @@ import {
   getDashboardSummary,
   getDashboardTimeline
 } from './dashboard-data.mjs';
+import { createScanJobManager } from './dashboard-scan-job.mjs';
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DEFAULT_STATIC_DIR = path.join(ROOT_DIR, 'web', 'dist');
+const DEFAULT_BROWSER_APP = 'com.bot.pc.doubao.browser';
 
 const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -40,7 +42,8 @@ function parseArgs(argv) {
     outDir: DEFAULT_OUT_DIR,
     port: Number(process.env.PORT || 4573),
     host: '127.0.0.1',
-    staticDir: DEFAULT_STATIC_DIR
+    staticDir: DEFAULT_STATIC_DIR,
+    browserApp: DEFAULT_BROWSER_APP
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -50,6 +53,7 @@ function parseArgs(argv) {
     else if (arg === '--port') options.port = Number.parseInt(argv[++index], 10);
     else if (arg === '--host') options.host = argv[++index];
     else if (arg === '--static-dir') options.staticDir = path.resolve(argv[++index]);
+    else if (arg === '--browser-app') options.browserApp = argv[++index];
     else if (arg === '--help' || arg === '-h') options.help = true;
   }
 
@@ -65,15 +69,17 @@ Options:
   --port <number>      HTTP port (default: 4573)
   --host <host>        Bind host (default: 127.0.0.1)
   --static-dir <path>  Built dashboard directory (default: web/dist)
+  --browser-app <id>   Browser bundle id used for collection (default: ${DEFAULT_BROWSER_APP})
 `);
 }
 
-function sendJson(res, statusCode, value) {
+function sendJson(res, statusCode, value, headers = {}) {
   const body = `${JSON.stringify(value, null, 2)}\n`;
   res.writeHead(statusCode, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
-    'access-control-allow-origin': '*'
+    'access-control-allow-origin': '*',
+    ...headers
   });
   res.end(body);
 }
@@ -96,8 +102,76 @@ function safeStaticPath(staticDir, pathname) {
   return path.join(staticDir, 'index.html');
 }
 
-async function handleApi(req, res, url, options) {
+function isLoopbackOrigin(origin) {
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    return ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function corsHeadersFor(req, allowPost = false) {
+  const origin = req.headers.origin;
+  const allowOrigin = origin && isLoopbackOrigin(origin) ? origin : '*';
+  return {
+    'access-control-allow-origin': allowOrigin,
+    'access-control-allow-methods': allowPost ? 'GET, POST, OPTIONS' : 'GET, OPTIONS',
+    'access-control-allow-headers': 'content-type, x-douyin-dashboard-action'
+  };
+}
+
+function allowedScanPost(req) {
+  const token = req.headers['x-douyin-dashboard-action'];
+  if (token !== 'scan') return false;
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  return isLoopbackOrigin(origin);
+}
+
+async function handleScanApi(req, res, url, scanManager) {
+  if (url.pathname === '/api/scan/events') {
+    if (req.method !== 'GET') {
+      sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req));
+      return true;
+    }
+    await scanManager.subscribe(req, res);
+    return true;
+  }
+
+  if (url.pathname === '/api/scan/status') {
+    if (req.method !== 'GET') {
+      sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req));
+      return true;
+    }
+    sendJson(res, 200, await scanManager.status(), corsHeadersFor(req));
+    return true;
+  }
+
+  if (url.pathname === '/api/scan/start' || url.pathname === '/api/scan/stop') {
+    if (req.method !== 'POST') {
+      sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req, true));
+      return true;
+    }
+    if (!allowedScanPost(req)) {
+      sendJson(res, 403, { error: 'scan-post-forbidden' }, corsHeadersFor(req, true));
+      return true;
+    }
+    const result = url.pathname.endsWith('/start') ? await scanManager.start() : await scanManager.stop();
+    sendJson(res, result.statusCode, result.body, corsHeadersFor(req, true));
+    return true;
+  }
+
+  return false;
+}
+
+async function handleApi(req, res, url, options, scanManager) {
   const common = { dbPath: options.db, outDir: options.outDir };
+
+  if (url.pathname.startsWith('/api/scan/')) {
+    return handleScanApi(req, res, url, scanManager);
+  }
 
   if (url.pathname === '/api/summary') {
     sendJson(res, 200, await getDashboardSummary(common));
@@ -146,32 +220,47 @@ async function handleApi(req, res, url, options) {
   return false;
 }
 
-function createDashboardServer(options) {
+function createDashboardServer(options = {}) {
+  const resolvedOptions = {
+    db: options.db || DEFAULT_DB,
+    outDir: options.outDir || DEFAULT_OUT_DIR,
+    port: options.port || 4573,
+    host: options.host || '127.0.0.1',
+    staticDir: options.staticDir || DEFAULT_STATIC_DIR,
+    browserApp: options.browserApp || DEFAULT_BROWSER_APP
+  };
+  const scanManager = options.scanManager || createScanJobManager({
+    rootDir: ROOT_DIR,
+    db: resolvedOptions.db,
+    outDir: resolvedOptions.outDir,
+    browserApp: resolvedOptions.browserApp
+  });
+
   return createServer(async (req, res) => {
+    const url = new URL(req.url || '/', `http://${resolvedOptions.host}:${resolvedOptions.port}`);
+    const isScanPath = url.pathname.startsWith('/api/scan/');
+
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
-        'access-control-allow-origin': '*',
-        'access-control-allow-methods': 'GET, OPTIONS',
-        'access-control-allow-headers': 'content-type'
+        ...corsHeadersFor(req, isScanPath)
       });
       res.end();
       return;
     }
 
-    if (req.method !== 'GET') {
+    if (req.method !== 'GET' && !isScanPath) {
       sendJson(res, 405, { error: 'method-not-allowed' });
       return;
     }
 
     try {
-      const url = new URL(req.url || '/', `http://${options.host}:${options.port}`);
       if (url.pathname.startsWith('/api/')) {
-        const handled = await handleApi(req, res, url, options);
+        const handled = await handleApi(req, res, url, resolvedOptions, scanManager);
         if (!handled) sendJson(res, 404, { error: 'api-not-found' });
         return;
       }
 
-      const staticPath = safeStaticPath(options.staticDir, url.pathname);
+      const staticPath = safeStaticPath(resolvedOptions.staticDir, url.pathname);
       if (!staticPath || !existsSync(staticPath)) {
         sendJson(res, 404, { error: 'not-found' });
         return;

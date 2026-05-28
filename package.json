@@ -36,8 +36,8 @@
     "pages:build": "vite build web --mode demo",
     "render:assets": "node scripts/render-demo-assets.mjs",
     "test:state": "node --disable-warning=ExperimentalWarning scripts/monitor-state.test.mjs",
-    "test:dashboard": "node --disable-warning=ExperimentalWarning scripts/dashboard-api.test.mjs && node scripts/dashboard-smoke.test.mjs",
-    "check": "node --check scripts/collect-followers.mjs && node --check scripts/dashboard-data.mjs && node --check scripts/serve-dashboard.mjs && node --check scripts/dev-dashboard.mjs && node --check scripts/render-demo-assets.mjs && tsc -p web/tsconfig.json"
+    "test:dashboard": "node --disable-warning=ExperimentalWarning scripts/dashboard-api.test.mjs && node scripts/dashboard-scan-job.test.mjs && node scripts/dashboard-smoke.test.mjs",
+    "check": "node --check scripts/collect-followers.mjs && node --check scripts/dashboard-data.mjs && node --check scripts/dashboard-scan-job.mjs && node --check scripts/serve-dashboard.mjs && node --check scripts/dev-dashboard.mjs && node --check scripts/render-demo-assets.mjs && node --check scripts/dashboard-scan-job.test.mjs && tsc -p web/tsconfig.json"
   },
   "engines": {
     "node": ">=24"

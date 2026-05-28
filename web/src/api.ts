@@ -1,5 +1,5 @@
 import mockData from '../demo/mock-data.json';
-import type { EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent } from './types';
+import type { EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent, ScanJobStatus } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const IS_DEMO = import.meta.env.MODE === 'demo';
@@ -20,6 +20,22 @@ async function fetchJson<T>(path: string, params?: Params): Promise<T> {
   const response = await fetch(withParams(path, params), { headers: { accept: 'application/json' } });
   if (!response.ok) throw new Error(`请求失败: ${response.status} ${response.statusText}`);
   return response.json() as Promise<T>;
+}
+
+async function postJson<T>(path: string): Promise<T> {
+  const response = await fetch(withParams(path), {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'x-douyin-dashboard-action': 'scan'
+    }
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = body?.error || `${response.status} ${response.statusText}`;
+    throw new Error(String(error));
+  }
+  return body as T;
 }
 
 function filterFollowers(params: Params = {}): Page<Follower> {
@@ -83,6 +99,49 @@ export async function loadFollowers(params: Params = {}): Promise<Page<Follower>
 export async function loadEvents(params: Params = {}): Promise<Page<FollowerEvent>> {
   if (IS_DEMO) return filterEvents(params);
   return fetchJson('/api/events', { limit: DEFAULT_PAGE_LIMIT, ...params });
+}
+
+export async function loadScanStatus(): Promise<ScanJobStatus> {
+  if (IS_DEMO) {
+    return {
+      id: null,
+      status: 'idle',
+      mode: 'monitor',
+      requestedMode: 'monitor',
+      reason: '',
+      startedAt: null,
+      finishedAt: null,
+      pagesFetched: 0,
+      count: 0,
+      profileFollowerCount: null,
+      hiddenOrUnavailableCount: null,
+      exitCode: null,
+      signal: null,
+      error: '',
+      logLines: [],
+      changeSummary: null,
+      partial: null
+    };
+  }
+  return fetchJson('/api/scan/status');
+}
+
+export async function startScanJob(): Promise<{ status: ScanJobStatus }> {
+  return postJson('/api/scan/start');
+}
+
+export async function stopScanJob(): Promise<{ status: ScanJobStatus }> {
+  return postJson('/api/scan/stop');
+}
+
+export function connectScanEvents(onStatus: (status: ScanJobStatus) => void, onError: (error: Event) => void) {
+  if (IS_DEMO) return () => {};
+  const source = new EventSource(withParams('/api/scan/events'));
+  source.addEventListener('status', (event) => {
+    onStatus(JSON.parse((event as MessageEvent).data) as ScanJobStatus);
+  });
+  source.onerror = onError;
+  return () => source.close();
 }
 
 export function exportUrl(name: 'latest.json' | 'latest.csv') {
