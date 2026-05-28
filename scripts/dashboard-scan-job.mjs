@@ -8,6 +8,8 @@ import { resolveBrowserRuntimeConfig } from './browser-runtime.mjs';
 import { defaultCookieFile, getCookieAuthStatus } from './cookie-auth.mjs';
 
 const MAX_LOG_LINES = 120;
+const MONITOR_EVENT_PREFIX = '__DOUYIN_MONITOR_EVENT__ ';
+const DEFAULT_AUTH_WAIT_SECONDS = 300;
 
 function nowId(date = new Date()) {
   return date.toISOString().replaceAll(':', '-').replaceAll('.', '-');
@@ -15,6 +17,16 @@ function nowId(date = new Date()) {
 
 function trimLogLines(lines) {
   return lines.slice(Math.max(0, lines.length - MAX_LOG_LINES));
+}
+
+function phaseFromStatus(status) {
+  if (status === 'idle') return 'idle';
+  if (status === 'starting') return 'starting';
+  if (status === 'stopping') return 'stopping';
+  if (status === 'completed') return 'completed';
+  if (status === 'failed') return 'failed';
+  if (status === 'interrupted') return 'interrupted';
+  return 'scanning';
 }
 
 function publicJob(job) {
@@ -34,6 +46,8 @@ function publicJob(job) {
       runtime: 'auto',
       runtimeLabel: '',
       cookieAuth: null,
+      phase: 'idle',
+      authChallenge: null,
       exitCode: null,
       signal: null,
       error: '',
@@ -58,6 +72,8 @@ function publicJob(job) {
     runtime: job.runtime,
     runtimeLabel: job.runtimeLabel,
     cookieAuth: job.cookieAuth || null,
+    phase: job.phase || phaseFromStatus(job.status),
+    authChallenge: job.authChallenge || null,
     exitCode: job.exitCode,
     signal: job.signal,
     error: job.error,
@@ -75,11 +91,79 @@ function appendLog(job, line) {
   parseLogLine(job, text);
 }
 
+function applyMonitorEvent(job, event) {
+  if (!event || typeof event.type !== 'string') return false;
+
+  if (event.type === 'auth_wait_started') {
+    job.phase = 'waiting_for_verification';
+    job.authChallenge = {
+      kind: event.kind === 'login' ? 'login' : 'captcha',
+      status: 'waiting',
+      startedAt: event.startedAt || new Date().toISOString(),
+      deadlineAt: event.deadlineAt || null,
+      message: event.message || '请在浏览器中完成人工验证。'
+    };
+    return true;
+  }
+
+  if (event.type === 'auth_wait_transient_navigation') {
+    job.phase = 'waiting_for_verification';
+    job.authChallenge = {
+      ...(job.authChallenge || {}),
+      kind: event.kind === 'login' ? 'login' : (job.authChallenge?.kind || 'captcha'),
+      status: 'waiting',
+      startedAt: event.startedAt || job.authChallenge?.startedAt || new Date().toISOString(),
+      deadlineAt: event.deadlineAt || job.authChallenge?.deadlineAt || null,
+      message: event.message || job.authChallenge?.message || '页面正在跳转或验证中，继续等待。'
+    };
+    return true;
+  }
+
+  if (event.type === 'auth_wait_resolved') {
+    job.phase = 'authenticating';
+    job.authChallenge = {
+      ...(job.authChallenge || {}),
+      kind: event.kind === 'login' ? 'login' : (job.authChallenge?.kind || 'captcha'),
+      status: 'resolved',
+      startedAt: event.startedAt || job.authChallenge?.startedAt || new Date().toISOString(),
+      deadlineAt: event.deadlineAt || job.authChallenge?.deadlineAt || null,
+      message: event.message || '人工登录/验证已完成，继续采集。'
+    };
+    return true;
+  }
+
+  if (event.type === 'auth_wait_timeout') {
+    job.phase = 'waiting_for_verification';
+    job.authChallenge = {
+      ...(job.authChallenge || {}),
+      kind: event.kind === 'login' ? 'login' : (job.authChallenge?.kind || 'captcha'),
+      status: 'timeout',
+      startedAt: event.startedAt || job.authChallenge?.startedAt || new Date().toISOString(),
+      deadlineAt: event.deadlineAt || job.authChallenge?.deadlineAt || null,
+      message: event.message || '等待人工登录/验证码超时。'
+    };
+    return true;
+  }
+
+  return false;
+}
+
+function parseMonitorEventLine(job, line) {
+  if (!line.startsWith(MONITOR_EVENT_PREFIX)) return false;
+  try {
+    const event = JSON.parse(line.slice(MONITOR_EVENT_PREFIX.length));
+    return applyMonitorEvent(job, event);
+  } catch {
+    return false;
+  }
+}
+
 function parseLogLine(job, line) {
   const modeMatch = line.match(/^扫描模式:\s*(\w+)\s*\(([^)]*)\)/);
   if (modeMatch) {
     job.mode = modeMatch[1];
     job.reason = modeMatch[2] || '';
+    job.phase = 'scanning';
     return;
   }
 
@@ -87,6 +171,7 @@ function parseLogLine(job, line) {
   if (runtimeMatch) {
     job.runtimeLabel = runtimeMatch[1];
     job.runtime = runtimeMatch[2];
+    if (job.phase === 'starting') job.phase = 'authenticating';
     return;
   }
 
@@ -96,6 +181,7 @@ function parseLogLine(job, line) {
     job.count = Number(pageMatch[3]);
     job.lastPageSize = Number(pageMatch[2]);
     job.hasMore = pageMatch[4] === 'true';
+    job.phase = 'scanning';
     return;
   }
 
@@ -104,6 +190,7 @@ function parseLogLine(job, line) {
     job.count = Number(partialMatch[1]);
     job.partialSavedAt = new Date().toISOString();
     job.partialPath = partialMatch[2];
+    job.phase = 'scanning';
     return;
   }
 
@@ -155,6 +242,10 @@ function feedChunk(job, emitter, chunk) {
   const lines = job.buffer.split(/\r?\n/);
   job.buffer = lines.pop() || '';
   for (const line of lines) {
+    if (parseMonitorEventLine(job, line)) {
+      emitter.emit('update');
+      continue;
+    }
     appendLog(job, line);
     emitter.emit('update');
   }
@@ -220,6 +311,7 @@ function createScanJobManager({
   cdpUrl = process.env.DOUYIN_CDP_URL || '',
   browserApp = process.env.DOUYIN_BROWSER_APP || '',
   cookieFile = process.env.DOUYIN_COOKIE_FILE || defaultCookieFile(outDir),
+  authWaitSeconds = Number.parseInt(process.env.DOUYIN_AUTH_WAIT_SECONDS || `${DEFAULT_AUTH_WAIT_SECONDS}`, 10),
   collectorPath = path.join(rootDir, 'scripts', 'collect-followers.mjs'),
   nodePath = process.execPath,
   spawnImpl = defaultSpawn
@@ -233,6 +325,9 @@ function createScanJobManager({
     { ...process.env, DOUYIN_COOKIE_FILE: '' }
   );
   const supportsCookieAuth = runtimeConfig.runtime === 'playwright' || runtimeConfig.runtime === 'cdp';
+  const resolvedAuthWaitSeconds = Number.isFinite(authWaitSeconds) && authWaitSeconds >= 0
+    ? authWaitSeconds
+    : DEFAULT_AUTH_WAIT_SECONDS;
 
   function isActive(job) {
     return job && ['starting', 'running', 'stopping'].includes(job.status);
@@ -292,6 +387,8 @@ function createScanJobManager({
       runtime: runtimeConfig.runtime,
       runtimeLabel: runtimeConfig.runtimeLabel,
       cookieAuth: await getCookieAuthStatus({ cookieFile, runtime: runtimeConfig.runtime }),
+      phase: 'starting',
+      authChallenge: null,
       exitCode: null,
       signal: null,
       error: '',
@@ -315,7 +412,7 @@ function createScanJobManager({
       '--mode',
       'monitor',
       '--auth-wait-seconds',
-      '300',
+      String(resolvedAuthWaitSeconds),
       '--db',
       db,
       '--out-dir',
@@ -337,6 +434,7 @@ function createScanJobManager({
 
     job.child = child;
     job.status = 'running';
+    job.phase = 'authenticating';
     emitStatus();
 
     child.stdout?.on('data', (chunk) => feedChunk(job, emitter, chunk));
@@ -346,18 +444,22 @@ function createScanJobManager({
       job.status = 'failed';
       job.error = error.message;
       job.finishedAt = new Date().toISOString();
+      job.phase = 'failed';
       currentJob = null;
       emitStatus();
     });
 
     child.on('exit', async (code, signal) => {
-      if (job.buffer) appendLog(job, job.buffer);
+      if (job.buffer) {
+        if (!parseMonitorEventLine(job, job.buffer)) appendLog(job, job.buffer);
+      }
       job.buffer = '';
       job.exitCode = code;
       job.signal = signal || null;
       job.finishedAt = new Date().toISOString();
       if (job.status === 'stopping' || signal === 'SIGTERM' || code === 143) job.status = 'interrupted';
       else job.status = code === 0 ? 'completed' : 'failed';
+      job.phase = phaseFromStatus(job.status);
 
       const latestPartial = await readJsonIfExists(path.join(outDir, 'in-progress', 'latest.partial.json'));
       if (latestPartial) {
@@ -402,6 +504,7 @@ function createScanJobManager({
       return { statusCode: 200, body: { status: await status() } };
     }
     currentJob.status = 'stopping';
+    currentJob.phase = 'stopping';
     appendLog(currentJob, '正在请求中止采集...');
     currentJob.child?.kill('SIGTERM');
     emitStatus();

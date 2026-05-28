@@ -109,7 +109,7 @@ Dashboard 也可以在“采集控制”面板上传 cookie-manager 无损 JSON�
 
 Cookie 注入不会主动刷新已打开的抖音页面；新 profile 或空白页会在首次导航前注入 cookie，避免因为页面刷新增加验证码触发概率。
 
-如果抖音在新 profile 中显示“验证码中间页”，dashboard 启动的采集任务会等待人工处理。请在弹出的浏览器窗口里手动完成验证码，任务会继续采集；项目不会自动处理或绕过验证码。
+如果抖音在新 profile 中显示“验证码中间页”，dashboard 启动的采集任务会进入“等待人工验证”状态并显示倒计时。请在弹出的浏览器窗口里手动完成验证码，任务会继续采集；项目不会自动处理或绕过验证码。默认等待 300 秒，可用 `DOUYIN_AUTH_WAIT_SECONDS=600 npm run dashboard` 或 `node scripts/serve-dashboard.mjs --auth-wait-seconds 600` 调整。
 
 ## 取关判断
 
@@ -158,6 +158,8 @@ npm run dashboard:dev
 - `GET /api/scan/events`
 - `POST /api/scan/start`
 - `POST /api/scan/stop`
+
+`GET /api/scan/status` 会返回 `phase` 和 `authChallenge`。当 `phase=waiting_for_verification` 时，说明采集浏览器需要人工登录或验证码处理；这只是状态展示，不包含自动验证码处理能力。
 - `GET /api/auth/cookies/status`
 - `POST /api/auth/cookies/import`
 - `DELETE /api/auth/cookies`

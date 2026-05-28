@@ -133,9 +133,31 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectText(page, '粉丝变化仪表盘');
   assert.equal(await page.locator('body').evaluate((body) => body.scrollWidth <= window.innerWidth + 2), true);
+
+  const waitingPort = await getFreePort();
+  const waitingServer = createDashboardServer({
+    db: dbPath,
+    outDir,
+    port: waitingPort,
+    host: '127.0.0.1',
+    staticDir: path.resolve('web/dist'),
+    scanManager: createWaitingScanManager()
+  });
+  await listen(waitingServer, waitingPort, '127.0.0.1');
+  try {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto(`http://127.0.0.1:${waitingPort}`, { waitUntil: 'domcontentloaded' });
+    await expectText(page, '等待验证码');
+    await expectText(page, '剩余');
+    await expectText(page, '不会自动识别或绕过验证码');
+    assert.equal(await page.getByRole('button', { name: '中止采集' }).count() >= 1, true);
+  } finally {
+    await page.goto('about:blank').catch(() => {});
+    await close(waitingServer);
+  }
 } finally {
   await browser.close();
-  await close(server);
+  if (server.listening) await close(server);
   await rm(dir, { recursive: true, force: true });
 }
 
@@ -149,6 +171,70 @@ function trackConsoleErrors(page) {
     if (message.type() === 'error') errors.push(message.text());
   });
   return errors;
+}
+
+function createWaitingScanManager() {
+  const status = {
+    id: 'scan-waiting',
+    status: 'running',
+    mode: 'monitor',
+    requestedMode: 'monitor',
+    reason: '',
+    startedAt: '2026-05-29T00:00:00.000Z',
+    finishedAt: null,
+    pagesFetched: 0,
+    count: 0,
+    profileFollowerCount: null,
+    hiddenOrUnavailableCount: null,
+    runtime: 'playwright',
+    runtimeLabel: 'Playwright profile',
+    cookieAuth: {
+      configured: true,
+      exportedAt: '2026-05-29T00:00:00.000Z',
+      sourceUrl: 'https://www.douyin.com/user/self',
+      cookieCount: 89,
+      acceptedCount: 61,
+      skippedCount: 28,
+      skippedReasons: [],
+      updatedAt: '2026-05-29T00:00:00.000Z',
+      runtimeSupported: true
+    },
+    phase: 'waiting_for_verification',
+    authChallenge: {
+      kind: 'captcha',
+      status: 'waiting',
+      startedAt: '2026-05-29T00:00:00.000Z',
+      deadlineAt: new Date(Date.now() + 300000).toISOString(),
+      message: '浏览器触发了抖音验证码。请在打开的浏览器窗口中手动完成验证，并确认进入自己的抖音主页。'
+    },
+    exitCode: null,
+    signal: null,
+    error: '',
+    logLines: ['浏览器触发了抖音验证码。正在等待人工处理。'],
+    changeSummary: null,
+    partial: null
+  };
+
+  return {
+    async status() {
+      return status;
+    },
+    async start() {
+      return { statusCode: 409, body: { error: 'scan-already-running', status } };
+    },
+    async stop() {
+      return { statusCode: 202, body: { status: { ...status, status: 'stopping', phase: 'stopping' } } };
+    },
+    async subscribe(_req, res) {
+      res.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-store',
+        connection: 'keep-alive',
+        'access-control-allow-origin': '*'
+      });
+      res.write(`event: status\ndata: ${JSON.stringify(status)}\n\n`);
+    }
+  };
 }
 
 console.log('dashboard smoke tests passed');

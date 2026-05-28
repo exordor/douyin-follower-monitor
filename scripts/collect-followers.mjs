@@ -10,6 +10,7 @@ import { createBrowserRuntime, resolveBrowserRuntimeConfig } from './browser-run
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_TARGET = 'https://www.douyin.com/user/self';
+const MONITOR_EVENT_PREFIX = '__DOUYIN_MONITOR_EVENT__ ';
 
 function parseArgs(argv) {
   const options = {
@@ -1631,6 +1632,10 @@ function pageNeedsHumanVerification(pageInfo) {
   return /验证码中间页|请完成下列验证|拖动完成|拼图|captcha|verify/i.test(`${pageInfo?.title || ''}\n${pageInfo?.text || ''}`);
 }
 
+function emitMonitorEvent(type, payload = {}) {
+  console.log(`${MONITOR_EVENT_PREFIX}${JSON.stringify({ type, ...payload })}`);
+}
+
 function isTransientPageReadError(error) {
   return /execution context was destroyed|navigation|frame was detached|target closed|cannot find context/i.test(
     String(error?.message || error)
@@ -1645,6 +1650,7 @@ async function waitForManualAuthIfNeeded(options, pageInfo) {
   const promptText = needsVerification
     ? '浏览器触发了抖音验证码。请在打开的浏览器窗口中手动完成验证，并确认进入自己的抖音主页。'
     : '浏览器里看起来还未登录。请完成登录，并确认打开的是你的个人主页。';
+  const challengeKind = needsVerification ? 'captcha' : 'login';
 
   if (process.stdin.isTTY) {
     await promptEnter(promptText);
@@ -1655,17 +1661,34 @@ async function waitForManualAuthIfNeeded(options, pageInfo) {
     throw new Error(`${promptText} 本次非交互式采集未启用等待，请先完成验证后重试，或通过 dashboard 启动采集。`);
   }
 
-  const deadline = Date.now() + options.authWaitSeconds * 1000;
+  const startedAt = new Date();
+  const deadline = startedAt.getTime() + options.authWaitSeconds * 1000;
+  const deadlineAt = new Date(deadline).toISOString();
+  emitMonitorEvent('auth_wait_started', {
+    kind: challengeKind,
+    status: 'waiting',
+    startedAt: startedAt.toISOString(),
+    deadlineAt,
+    message: promptText
+  });
   console.log(`${promptText} 正在等待人工处理，最长 ${options.authWaitSeconds} 秒。`);
+  const pollMs = options.authPollMs || 2000;
   let loggedNavigationWait = false;
   while (Date.now() < deadline) {
-    await sleep(2000);
+    await sleep(pollMs);
     let current;
     try {
       current = await options.browserRuntime.readPageInfo();
     } catch (error) {
       if (isTransientPageReadError(error)) {
         if (!loggedNavigationWait) {
+          emitMonitorEvent('auth_wait_transient_navigation', {
+            kind: challengeKind,
+            status: 'waiting',
+            startedAt: startedAt.toISOString(),
+            deadlineAt,
+            message: '页面正在跳转或验证中，继续等待。'
+          });
           console.log('页面正在跳转或验证中，继续等待。');
           loggedNavigationWait = true;
         }
@@ -1674,11 +1697,25 @@ async function waitForManualAuthIfNeeded(options, pageInfo) {
       throw error;
     }
     if (!pageLooksLoggedOut(current) && !pageNeedsHumanVerification(current)) {
+      emitMonitorEvent('auth_wait_resolved', {
+        kind: challengeKind,
+        status: 'resolved',
+        startedAt: startedAt.toISOString(),
+        deadlineAt,
+        message: '人工登录/验证已完成，继续采集。'
+      });
       console.log('人工登录/验证已完成，继续采集。');
       return current;
     }
   }
 
+  emitMonitorEvent('auth_wait_timeout', {
+    kind: challengeKind,
+    status: 'timeout',
+    startedAt: startedAt.toISOString(),
+    deadlineAt,
+    message: `等待人工登录/验证码超时: ${options.authWaitSeconds} 秒。`
+  });
   throw new Error(`等待人工登录/验证码超时: ${options.authWaitSeconds} 秒。`);
 }
 
@@ -1921,5 +1958,6 @@ export {
   closeMonitorDatabase,
   decideEffectiveScanMode,
   getExportFollowersFromDb,
-  openMonitorDatabase
+  openMonitorDatabase,
+  waitForManualAuthIfNeeded
 };

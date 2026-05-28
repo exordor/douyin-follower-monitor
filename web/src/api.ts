@@ -130,6 +130,8 @@ export async function loadScanStatus(): Promise<ScanJobStatus> {
         updatedAt: null,
         runtimeSupported: false
       },
+      phase: 'idle',
+      authChallenge: null,
       exitCode: null,
       signal: null,
       error: '',

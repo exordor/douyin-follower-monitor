@@ -101,6 +101,15 @@ export interface OverviewData {
 }
 
 export type ScanJobState = 'idle' | 'starting' | 'running' | 'stopping' | 'completed' | 'failed' | 'interrupted';
+export type ScanJobPhase = 'idle' | 'starting' | 'authenticating' | 'waiting_for_verification' | 'scanning' | 'finalizing' | 'stopping' | 'completed' | 'failed' | 'interrupted';
+
+export interface ScanJobAuthChallenge {
+  kind: 'captcha' | 'login';
+  status: 'waiting' | 'resolved' | 'timeout';
+  startedAt: string;
+  deadlineAt: string | null;
+  message: string;
+}
 
 export interface ScanJobPartial {
   collectedAt: string | null;
@@ -154,6 +163,8 @@ export interface ScanJobStatus {
   runtime: string;
   runtimeLabel: string;
   cookieAuth: CookieAuthStatus | null;
+  phase: ScanJobPhase;
+  authChallenge: ScanJobAuthChallenge | null;
   exitCode: number | null;
   signal: string | null;
   error: string;

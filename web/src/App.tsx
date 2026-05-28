@@ -57,6 +57,19 @@ const MODE_LABELS: Record<string, string> = {
   full: '全量'
 };
 
+const PHASE_LABELS: Record<string, string> = {
+  idle: '空闲',
+  starting: '启动中',
+  authenticating: '准备登录态',
+  waiting_for_verification: '等待验证',
+  scanning: '采集中',
+  finalizing: '收尾保存',
+  stopping: '中止中',
+  completed: '已完成',
+  failed: '失败',
+  interrupted: '已中断'
+};
+
 const DEFAULT_PAGE_SIZE = 50;
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500];
 const ACTIVE_SCAN_STATUSES = new Set(['starting', 'running', 'stopping']);
@@ -74,6 +87,15 @@ function formatDate(value: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit'
   }).format(new Date(value));
+}
+
+function formatRemaining(deadlineAt: string | null | undefined, now: number) {
+  if (!deadlineAt) return '-';
+  const remaining = Math.max(0, Date.parse(deadlineAt) - now);
+  const totalSeconds = Math.ceil(remaining / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function metricCards(data: OverviewData) {
@@ -556,9 +578,15 @@ function ScanControlPanel({
   onCookieClear: () => void;
 }) {
   const cookieInputRef = useRef<HTMLInputElement>(null);
+  const [now, setNow] = useState(Date.now());
   const hasStatus = Boolean(status);
   const logs = status?.logLines.slice(-8) || [];
   const change = status?.changeSummary;
+  const authChallenge = status?.authChallenge || null;
+  const waitingForVerification = status?.phase === 'waiting_for_verification' && authChallenge?.status === 'waiting';
+  const challengeTitle = authChallenge?.kind === 'login' ? '等待登录' : '等待验证码';
+  const challengeDetail = authChallenge?.message || '请在打开的浏览器窗口里完成人工验证。';
+  const challengeRemaining = formatRemaining(authChallenge?.deadlineAt, now);
   const partialText = status?.partial
     ? `${formatDate(status.partial.collectedAt)} 保存 ${formatNumber(status.partial.count)} 条`
     : '等待采集进度';
@@ -575,6 +603,13 @@ function ScanControlPanel({
     : auth?.runtimeSupported === false
       ? '当前 runtime 不使用 cookie 注入'
       : '等待上传 cookie-manager 无损 JSON';
+
+  useEffect(() => {
+    if (!waitingForVerification) return undefined;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [waitingForVerification]);
 
   const handleCookieFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
@@ -605,6 +640,7 @@ function ScanControlPanel({
 
       <div className="scan-grid">
         <div><span>状态</span><strong>{hasStatus ? <StatusPill value={status!.status} /> : '-'}</strong></div>
+        <div><span>阶段</span><strong>{PHASE_LABELS[status?.phase || 'idle'] || status?.phase || '-'}</strong></div>
         <div><span>Runtime</span><strong>{status?.runtimeLabel || status?.runtime || '-'}</strong></div>
         <div><span>模式</span><strong>{MODE_LABELS[status?.mode || 'monitor'] || status?.mode || '自动'}</strong></div>
         <div><span>原因</span><strong>{status?.reason || '-'}</strong></div>
@@ -614,6 +650,21 @@ function ScanControlPanel({
         <div><span>Partial</span><strong>{partialText}</strong></div>
         <div><span>结束</span><strong>{formatDate(status?.finishedAt)}</strong></div>
       </div>
+
+      {waitingForVerification && (
+        <div className="verification-card">
+          <div className="verification-icon"><Clock3 size={18} /></div>
+          <div className="verification-main">
+            <span>{challengeTitle}</span>
+            <strong>{challengeDetail}</strong>
+            <small>在采集浏览器中完成后会自动继续；不会自动识别或绕过验证码。</small>
+          </div>
+          <div className="verification-meta">
+            <span>剩余</span>
+            <strong>{challengeRemaining}</strong>
+          </div>
+        </div>
+      )}
 
       <div className="cookie-auth-card">
         <div className="cookie-auth-main">

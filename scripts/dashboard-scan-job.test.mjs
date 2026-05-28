@@ -11,6 +11,12 @@ import { PassThrough } from 'node:stream';
 import { createScanJobManager } from './dashboard-scan-job.mjs';
 import { createDashboardServer } from './serve-dashboard.mjs';
 
+const EVENT_PREFIX = '__DOUYIN_MONITOR_EVENT__ ';
+
+function monitorEvent(type, payload = {}) {
+  return `${EVENT_PREFIX}${JSON.stringify({ type, ...payload })}\n`;
+}
+
 function createFakeSpawn() {
   const children = [];
   const spawnImpl = (command, args) => {
@@ -27,11 +33,41 @@ function createFakeSpawn() {
     };
     children.push(child);
     setTimeout(() => {
+      const startedAt = '2026-05-29T00:00:00.000Z';
+      const deadlineAt = '2026-05-29T00:05:00.000Z';
       child.stdout.write('Runtime: Chrome DevTools Protocol (cdp)\n');
+      child.stdout.write(monitorEvent('auth_wait_started', {
+        kind: 'captcha',
+        status: 'waiting',
+        startedAt,
+        deadlineAt,
+        message: '浏览器触发了抖音验证码。请在打开的浏览器窗口中手动完成验证，并确认进入自己的抖音主页。'
+      }));
+    }, 10);
+    setTimeout(() => {
+      child.stdout.write(monitorEvent('auth_wait_transient_navigation', {
+        kind: 'captcha',
+        status: 'waiting',
+        startedAt: '2026-05-29T00:00:00.000Z',
+        deadlineAt: '2026-05-29T00:05:00.000Z',
+        message: '页面正在跳转或验证中，继续等待。'
+      }));
+    }, 20);
+    setTimeout(() => {
+      child.stdout.write(monitorEvent('auth_wait_resolved', {
+        kind: 'captcha',
+        status: 'resolved',
+        startedAt: '2026-05-29T00:00:00.000Z',
+        deadlineAt: '2026-05-29T00:05:00.000Z',
+        message: '人工登录/验证已完成，继续采集。'
+      }));
+      child.stdout.write('人工登录/验证已完成，继续采集。\n');
+    }, 30);
+    setTimeout(() => {
       child.stdout.write('扫描模式: full (profile-followers-decreased)\n');
       child.stdout.write('API 第 1 页: 本页 20，累计 20，hasMore=true\n');
       child.stdout.write('已保存进度: 20 -> /tmp/latest.partial.json\n');
-    }, 10);
+    }, 45);
     return child;
   };
   return { spawnImpl, children };
@@ -213,10 +249,12 @@ try {
   assert.equal(importForbidden.statusCode, 403);
 
   const ssePromise = waitForSse(port, (status) => status.status === 'running' || status.count >= 20);
+  const authWaitSsePromise = waitForSse(port, (status) => status.phase === 'waiting_for_verification');
   const started = await requestJson(port, 'POST', '/api/scan/start', {
     'x-douyin-dashboard-action': 'scan'
   });
   assert.equal(started.statusCode, 202);
+  assert.equal(started.body.status.phase, 'authenticating');
 
   const duplicate = await requestJson(port, 'POST', '/api/scan/start', {
     'x-douyin-dashboard-action': 'scan'
@@ -225,6 +263,11 @@ try {
 
   const eventStatus = await ssePromise;
   assert.equal(['running', 'starting'].includes(eventStatus.status), true);
+
+  const authWaitStatus = await authWaitSsePromise;
+  assert.equal(authWaitStatus.authChallenge.kind, 'captcha');
+  assert.equal(authWaitStatus.authChallenge.status, 'waiting');
+  assert.equal(authWaitStatus.authChallenge.deadlineAt, '2026-05-29T00:05:00.000Z');
 
   const parsed = await waitFor(async () => {
     const current = await manager.status();
@@ -236,6 +279,8 @@ try {
   assert.equal(parsed.reason, 'profile-followers-decreased');
   assert.equal(parsed.pagesFetched, 1);
   assert.equal(parsed.count, 20);
+  assert.equal(parsed.phase, 'scanning');
+  assert.equal(parsed.authChallenge.status, 'resolved');
   assert.notEqual(parsed.reason, 'stale-partial');
 
   const stopped = await requestJson(port, 'POST', '/api/scan/stop', {
@@ -248,6 +293,7 @@ try {
     return current.status === 'interrupted' ? current : null;
   });
   assert.equal(finalStatus.signal, 'SIGTERM');
+  assert.equal(finalStatus.phase, 'interrupted');
   assert.equal(children[0].killSignal, 'SIGTERM');
   assert.deepEqual(children[0].args.slice(0, 7), [
     '--disable-warning=ExperimentalWarning',
