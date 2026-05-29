@@ -17,6 +17,7 @@
 
 ```bash
 npm install
+npm run doctor
 npm run monitor
 npm run dashboard
 ```
@@ -55,6 +56,7 @@ npm run monitor
 常用脚本：
 
 ```bash
+npm run doctor
 npm run scan:recent
 npm run scan:full
 npm run monitor:doubao
@@ -98,6 +100,8 @@ npm run dashboard:doubao
 3. `apple-events`：适合 macOS 复用豆包浏览器，但不适合作为跨平台默认方案。
 
 Dashboard 的“Runtime 健康”卡片会根据当前 runtime、Cookie 登录态和验证码等待状态给出建议。Cookie 只能复用你已经拥有的登录态，不能保证免验证码；如果平台要求验证，请人工完成。项目不实现验证码识别、模拟拖动、代理池规避或第三方打码。
+
+遇到验证码、Cookie 导入、CDP、Playwright profile、API runtime 或扫描中断问题时，请先阅读 [Troubleshooting](docs/troubleshooting.md)。
 
 ## Cookie 登录态
 
@@ -162,6 +166,9 @@ npm run dashboard:dev
 - `GET /api/events?type=&q=&limit=&offset=`
 - `GET /api/followers?status=&q=&limit=&offset=`
 - `GET /api/runs?limit=100`
+- `GET /api/runs/:runId`
+- `GET /api/runs/:runId/events?type=&limit=&offset=`
+- `GET /api/compare?from=<runId>&to=<runId>`
 - `GET /api/export/latest.json`
 - `GET /api/export/latest.csv`
 - `GET /api/scan/status`
@@ -199,6 +206,31 @@ node --disable-warning=ExperimentalWarning scripts/serve-dashboard.mjs \
 
 `data/` 默认被 `.gitignore` 忽略。不要提交真实粉丝数据。
 
+## 诊断与调试
+
+首次运行或提 issue 前，先跑本地诊断：
+
+```bash
+npm run doctor
+npm run doctor -- --json
+```
+
+`doctor` 会检查 Node.js、依赖安装、Playwright Chromium、CDP 连接、Cookie 文件、数据目录写入和 SQLite 创建能力。JSON 输出只包含状态摘要，不包含 cookie 名称和值。
+
+发布前隐私自检：
+
+```bash
+npm run privacy:check
+```
+
+提 issue 时可生成匿名调试包：
+
+```bash
+npm run debug:bundle
+```
+
+调试包写入 `debug/douyin-monitor-debug-*.zip`，只包含运行环境、schema、最近错误摘要等脱敏信息，不包含粉丝列表、cookie、完整本地路径或真实账号标识。分享前仍建议自行打开检查。
+
 ## 隐私边界
 
 抖音账号可以关闭“在他人关注和粉丝列表公开出现”。这类账号可能计入主页粉丝数，但不会出现在可枚举粉丝列表中。
@@ -216,9 +248,12 @@ node --disable-warning=ExperimentalWarning scripts/serve-dashboard.mjs \
 ```bash
 npm ci
 npm run check
+npm run test:doctor
 npm run test:state
-npm run dashboard:build
 npm run test:dashboard
+npm run privacy:check
+npm run test:debug-bundle
+npm run dashboard:build
 npm run pages:build
 ```
 

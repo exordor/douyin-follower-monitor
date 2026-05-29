@@ -229,6 +229,7 @@ async function getDashboardEvents({
   dbPath = DEFAULT_DB,
   type = '',
   q = '',
+  runId = '',
   limit = 100,
   offset = 0
 } = {}) {
@@ -243,6 +244,10 @@ async function getDashboardEvents({
     if (EVENT_TYPES.has(type)) {
       where.push('e.type = ?');
       params.push(type);
+    }
+    if (runId) {
+      where.push('e.runId = ?');
+      params.push(String(runId));
     }
     if (String(q || '').trim()) {
       where.push('(LOWER(f.nickname) LIKE ? OR LOWER(e.followerId) LIKE ? OR LOWER(e.payloadJson) LIKE ?)');
@@ -293,6 +298,112 @@ async function getDashboardRuns({ dbPath = DEFAULT_DB, limit = 100 } = {}) {
         Number(row.profileFollowerCount || 0) - Number(row.enumerableCount || 0)
       )
     }));
+  } finally {
+    closeDashboardDb(db);
+  }
+}
+
+async function getDashboardRun({ dbPath = DEFAULT_DB, runId = '' } = {}) {
+  const db = await openExistingDashboardDb(dbPath);
+  if (!db || !runId) return null;
+  try {
+    const run = db.prepare(`
+      SELECT runId, mode, requestedMode, startedAt, finishedAt, status,
+             profileFollowerCount, enumerableCount, pagesFetched, reason
+      FROM scan_runs
+      WHERE runId = ?
+    `).get(runId);
+    if (!run) return null;
+    const counts = db.prepare(`
+      SELECT type, COUNT(*) AS count
+      FROM follower_events
+      WHERE runId = ?
+      GROUP BY type
+    `).all(runId).reduce((acc, row) => {
+      acc[row.type] = Number(row.count || 0);
+      return acc;
+    }, {});
+    return {
+      ...run,
+      hiddenOrUnavailableCount: Math.max(
+        0,
+        Number(run.profileFollowerCount || 0) - Number(run.enumerableCount || 0)
+      ),
+      eventCounts: {
+        new: counts.new || 0,
+        renamed: counts.renamed || 0,
+        suspected_removed: counts.suspected_removed || 0,
+        removed: counts.removed || 0,
+        reappeared: counts.reappeared || 0
+      }
+    };
+  } finally {
+    closeDashboardDb(db);
+  }
+}
+
+async function getDashboardRunEvents({
+  dbPath = DEFAULT_DB,
+  runId = '',
+  type = '',
+  limit = 100,
+  offset = 0
+} = {}) {
+  return getDashboardEvents({ dbPath, type, q: '', limit, offset, runId });
+}
+
+async function getDashboardCompare({ dbPath = DEFAULT_DB, from = '', to = '' } = {}) {
+  const db = await openExistingDashboardDb(dbPath);
+  if (!db || !from || !to) return null;
+  try {
+    const fromRun = await getDashboardRun({ dbPath, runId: from });
+    const toRun = await getDashboardRun({ dbPath, runId: to });
+    if (!fromRun || !toRun) return null;
+    const fromTime = fromRun.startedAt;
+    const toTime = toRun.startedAt;
+    const start = fromTime <= toTime ? fromTime : toTime;
+    const end = fromTime <= toTime ? toTime : fromTime;
+    const rows = db.prepare(`
+      SELECT e.eventId, e.followerId, e.type, e.runId, e.createdAt, e.payloadJson,
+             f.nickname, f.profileUrl, f.status
+      FROM follower_events e
+      JOIN scan_runs r ON r.runId = e.runId
+      LEFT JOIN followers f ON f.id = e.followerId
+      WHERE r.startedAt >= ?
+        AND r.startedAt <= ?
+        AND e.runId != ?
+      ORDER BY r.startedAt ASC, e.createdAt ASC, e.eventId ASC
+    `).all(start, end, fromRun.runId).map((row) => ({
+      ...row,
+      payload: safeJson(row.payloadJson)
+    }));
+    const buckets = {
+      added: [],
+      missing: [],
+      renamed: [],
+      reappeared: []
+    };
+    for (const row of rows) {
+      if (row.type === 'new') buckets.added.push(row);
+      else if (row.type === 'suspected_removed' || row.type === 'removed') buckets.missing.push(row);
+      else if (row.type === 'renamed') buckets.renamed.push(row);
+      else if (row.type === 'reappeared') buckets.reappeared.push(row);
+    }
+    const warning = fromRun.mode !== 'full' || toRun.mode !== 'full'
+      ? '包含 recent 扫描时，对比结果只作为事件窗口参考；只有 full 扫描缺失才能作为取关判断。'
+      : '';
+    return {
+      fromRun,
+      toRun,
+      warning,
+      counts: {
+        added: buckets.added.length,
+        missing: buckets.missing.length,
+        renamed: buckets.renamed.length,
+        reappeared: buckets.reappeared.length
+      },
+      ...buckets
+    };
   } finally {
     closeDashboardDb(db);
   }
@@ -359,6 +470,9 @@ export {
   getDashboardEvents,
   getDashboardExport,
   getDashboardFollowers,
+  getDashboardCompare,
+  getDashboardRun,
+  getDashboardRunEvents,
   getDashboardRuns,
   getDashboardSummary,
   getDashboardTimeline

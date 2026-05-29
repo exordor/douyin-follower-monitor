@@ -15,6 +15,9 @@ import {
   getDashboardEventDaily,
   getDashboardEvents,
   getDashboardFollowers,
+  getDashboardCompare,
+  getDashboardRun,
+  getDashboardRunEvents,
   getDashboardRuns,
   getDashboardSummary,
   getDashboardTimeline
@@ -66,7 +69,7 @@ async function withFixture(fn) {
       ) VALUES ('run-b', 'full', 'monitor', ?, ?, 'completed', 4, 3, 2, 'full-interval-elapsed')
     `).run(new Date(Date.now() - 86400000).toISOString(), new Date(Date.now() - 86400000).toISOString());
 
-    applyScanToDatabase(db, options('run-c', 3), [y, z]);
+    applyScanToDatabase(db, options('run-c', 3), [{ ...y, nickname: '用户 Y 改名' }, z]);
     db.prepare(`
       INSERT INTO scan_runs (
         runId, mode, requestedMode, startedAt, finishedAt, status,
@@ -124,6 +127,34 @@ await withFixture(async ({ dbPath, outDir }) => {
   const runs = await getDashboardRuns({ dbPath, limit: 2 });
   assert.equal(runs.length, 2);
   assert.equal(runs[0].runId, 'run-c');
+
+  const runDetail = await getDashboardRun({ dbPath, runId: 'run-b' });
+  assert.equal(runDetail.runId, 'run-b');
+  assert.equal(runDetail.eventCounts.new, 1);
+  assert.equal(runDetail.eventCounts.renamed >= 1, true);
+
+  const runEvents = await getDashboardRunEvents({ dbPath, runId: 'run-b', type: 'new', limit: 10, offset: 0 });
+  assert.equal(runEvents.total, 1);
+  assert.equal(runEvents.rows[0].runId, 'run-b');
+
+  const compared = await getDashboardCompare({ dbPath, from: 'run-a', to: 'run-c' });
+  assert.equal(compared.fromRun.runId, 'run-a');
+  assert.equal(compared.toRun.runId, 'run-c');
+  assert.deepEqual(compared.added.map((row) => row.followerId), ['sec-z']);
+  assert.deepEqual(compared.renamed.map((row) => row.followerId), ['sec-y']);
+  assert.deepEqual(compared.missing.map((row) => row.followerId), ['sec-x']);
+  assert.equal(compared.reappeared.length, 0);
+  assert.equal(compared.added.some((row) => row.runId === 'run-a'), false);
+  assert.deepEqual(compared.counts, {
+    added: 1,
+    missing: 1,
+    renamed: 1,
+    reappeared: 0
+  });
+  assert.equal(compared.warning, '');
+
+  const missingRun = await getDashboardRun({ dbPath, runId: 'missing-run' });
+  assert.equal(missingRun, null);
 });
 
 const emptySummary = await getDashboardSummary({

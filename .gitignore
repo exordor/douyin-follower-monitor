@@ -9,6 +9,8 @@ coverage/
 .douyin-browser/
 .douyin-browser-*/
 data/
+debug/
+.debug/
 *.db
 *.db-shm
 *.db-wal
@@ -17,6 +19,7 @@ data/
 *.sqlite-wal
 *.partial.json
 *.partial.csv
+*.zip
 
 *.log
 npm-debug.log*

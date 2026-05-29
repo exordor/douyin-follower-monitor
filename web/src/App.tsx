@@ -33,9 +33,9 @@ import {
 } from 'lucide-react';
 import type { ChangeEvent, ReactNode } from 'react';
 
-import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadRuntimeHealth, loadScanStatus, startScanJob, stopScanJob } from './api';
+import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadRunCompare, loadRunDetail, loadRunEvents, loadRuntimeHealth, loadScanStatus, startScanJob, stopScanJob } from './api';
 import { EventBars, StatusDonut, TrendChart } from './components/Charts';
-import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, RuntimeHealthStatus, ScanJobStatus, ScanRun } from './types';
+import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, RuntimeHealthStatus, RunCompareResult, ScanJobStatus, ScanRun, ScanRunDetail } from './types';
 
 const EVENT_LABELS: Record<EventType, string> = {
   new: '新增',
@@ -177,6 +177,15 @@ function App() {
   const [cookieError, setCookieError] = useState('');
   const [cookieBusy, setCookieBusy] = useState(false);
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthStatus | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState('');
+  const [runDetail, setRunDetail] = useState<ScanRunDetail | null>(null);
+  const [runEvents, setRunEvents] = useState<Page<FollowerEvent> | null>(null);
+  const [runError, setRunError] = useState('');
+  const [compareFrom, setCompareFrom] = useState('');
+  const [compareTo, setCompareTo] = useState('');
+  const [compareResult, setCompareResult] = useState<RunCompareResult | null>(null);
+  const [compareError, setCompareError] = useState('');
+  const [compareBusy, setCompareBusy] = useState(false);
   const previousScanStateRef = useRef('');
   const refreshAfterScanRef = useRef<() => Promise<void>>(async () => {});
 
@@ -189,6 +198,9 @@ function App() {
         setData(overview);
         setFollowers(overview.followers);
         setEvents(overview.events);
+        setSelectedRunId((current) => current || overview.runs[0]?.runId || '');
+        setCompareFrom((current) => current || overview.runs[1]?.runId || overview.runs[0]?.runId || '');
+        setCompareTo((current) => current || overview.runs[0]?.runId || '');
         setError('');
       })
       .catch((err) => {
@@ -202,6 +214,31 @@ function App() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedRunId) {
+      setRunDetail(null);
+      setRunEvents(null);
+      return undefined;
+    }
+    let alive = true;
+    Promise.all([
+      loadRunDetail(selectedRunId),
+      loadRunEvents(selectedRunId, { limit: 20, offset: 0 })
+    ])
+      .then(([detail, page]) => {
+        if (!alive) return;
+        setRunDetail(detail);
+        setRunEvents(page);
+        setRunError('');
+      })
+      .catch((err) => {
+        if (alive) setRunError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedRunId]);
 
   useEffect(() => {
     let alive = true;
@@ -344,6 +381,20 @@ function App() {
     }
   };
 
+  const handleCompareRuns = async () => {
+    if (!compareFrom || !compareTo) return;
+    setCompareBusy(true);
+    setCompareError('');
+    try {
+      const result = await loadRunCompare(compareFrom, compareTo);
+      setCompareResult(result);
+    } catch (err) {
+      setCompareError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCompareBusy(false);
+    }
+  };
+
   const cards = useMemo(() => (data ? metricCards(data) : []), [data]);
   const scanRunning = Boolean(scanStatus && ACTIVE_SCAN_STATUSES.has(scanStatus.status));
 
@@ -380,6 +431,7 @@ function App() {
         </div>
         <nav className="nav">
           <a className="nav-item active" href="#overview"><BarChart3 size={18} />总览</a>
+          <a className="nav-item" href="#setup"><ShieldCheck size={18} />Setup</a>
           <a className="nav-item" href="#events"><History size={18} />事件</a>
           <a className="nav-item" href="#followers"><CircleDot size={18} />粉丝</a>
           <a className="nav-item" href="#runs"><GitBranch size={18} />扫描</a>
@@ -422,6 +474,15 @@ function App() {
           <Database size={18} />
           <span>只统计当前账号可枚举的粉丝列表；隐藏或不可用账号只作为数量差值展示，不尝试补全。</span>
         </section>
+
+        <SetupPanel
+          summary={data.summary}
+          runs={data.runs}
+          runtimeHealth={runtimeHealth}
+          cookieAuth={cookieAuth}
+          scanStatus={scanStatus}
+          isDemo={isDemoMode}
+        />
 
         <ScanControlPanel
           status={scanStatus}
@@ -567,7 +628,19 @@ function App() {
 
         <section className="panel runs-panel" id="runs">
           <PanelHeader icon={GitBranch} title="扫描运行记录" subtitle="recent/full/monitor 的最近执行状态" />
-          <RunsTable runs={data.runs} />
+          <RunsTable runs={data.runs} selectedRunId={selectedRunId} onSelectRun={setSelectedRunId} />
+          <RunDetailPanel detail={runDetail} events={runEvents?.rows || []} error={runError} />
+          <ComparePanel
+            runs={data.runs}
+            from={compareFrom}
+            to={compareTo}
+            result={compareResult}
+            error={compareError}
+            busy={compareBusy}
+            onFromChange={setCompareFrom}
+            onToChange={setCompareTo}
+            onCompare={handleCompareRuns}
+          />
         </section>
       </main>
     </div>
@@ -583,6 +656,120 @@ function PanelHeader({ icon: Icon, title, subtitle }: { icon: LucideIcon; title:
         <p>{subtitle}</p>
       </div>
     </div>
+  );
+}
+
+function CopyCommandButton({ command, disabled = false }: { command: string; disabled?: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyCommand = async () => {
+    if (!command) return;
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <button className="button compact" type="button" onClick={copyCommand} disabled={disabled || !command}>
+      <Copy size={15} />{copied ? '已复制' : '复制'}
+    </button>
+  );
+}
+
+function SetupPanel({
+  summary,
+  runs,
+  runtimeHealth,
+  cookieAuth,
+  scanStatus,
+  isDemo
+}: {
+  summary: OverviewData['summary'];
+  runs: ScanRun[];
+  runtimeHealth: RuntimeHealthStatus | null;
+  cookieAuth: CookieAuthStatus | null;
+  scanStatus: ScanJobStatus | null;
+  isDemo: boolean;
+}) {
+  const hasFullBaseline = runs.some((run) => run.mode === 'full' && run.status === 'completed') || summary.latestCompletedRun?.mode === 'full';
+  const latestRunOk = summary.latestRun?.status === 'completed';
+  const cdpChromeCommand = '/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.douyin-cdp-profile"';
+  const cdpDashboardCommand = 'DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run dashboard';
+  const monitorCommand = cookieAuth?.configured ? 'npm run monitor' : 'npm run doctor';
+  const setupChecks = [
+    { label: 'SQLite 数据库', value: summary.hasDatabase ? '已创建' : '未创建', state: summary.hasDatabase ? 'pass' : 'fail' },
+    { label: 'Full 基线', value: hasFullBaseline ? '已完成' : '待建立', state: hasFullBaseline ? 'pass' : 'warn' },
+    { label: '最近扫描', value: summary.latestRun ? (latestRunOk ? '成功' : summary.latestRun.status) : '暂无', state: latestRunOk ? 'pass' : 'warn' },
+    { label: 'Cookie 登录态', value: cookieAuth?.configured ? `${formatNumber(cookieAuth.acceptedCount)} 可用` : '未配置', state: cookieAuth?.configured ? 'pass' : 'info' }
+  ];
+
+  return (
+    <section className="panel setup-panel" id="setup">
+      <PanelHeader
+        icon={ShieldCheck}
+        title="Setup / 快速开始"
+        subtitle={isDemo ? '公开演示只展示 mock 配置路径' : '先跑 doctor，再选择稳定 runtime，最后建立 full 基线'}
+      />
+
+      <div className="setup-grid">
+        <article className="setup-card recommended">
+          <span>推荐路径</span>
+          <strong>CDP 复用已登录浏览器</strong>
+          <p>稳定性通常最好。保持 Chrome/Edge/Chromium 已登录，并让 dashboard 连接本机 DevTools 端口。</p>
+          <div className="setup-command">
+            <code>{runtimeHealth?.commandHint || cdpDashboardCommand}</code>
+            <CopyCommandButton command={runtimeHealth?.commandHint || cdpDashboardCommand} disabled={isDemo} />
+          </div>
+        </article>
+
+        <article className="setup-card">
+          <span>备选路径</span>
+          <strong>Playwright profile + Cookie</strong>
+          <p>适合跨平台首次试用。Cookie 只能复用登录态，不能保证免验证码；触发验证时需要人工处理。</p>
+          <div className="setup-command">
+            <code>{monitorCommand}</code>
+            <CopyCommandButton command={monitorCommand} disabled={isDemo} />
+          </div>
+        </article>
+
+        <article className="setup-card">
+          <span>macOS 快捷路径</span>
+          <strong>Apple Events / 豆包浏览器</strong>
+          <p>适合作者当前环境，但不是跨平台方案；开源用户优先尝试 CDP 或 Playwright。</p>
+          <div className="setup-command">
+            <code>npm run dashboard:doubao</code>
+            <CopyCommandButton command="npm run dashboard:doubao" disabled={isDemo} />
+          </div>
+        </article>
+      </div>
+
+      <div className="setup-checks">
+        {setupChecks.map((item) => (
+          <div className={`setup-check ${item.state}`} key={item.label}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="setup-helper">
+        <div>
+          <span>Chrome CDP 启动命令</span>
+          <code>{cdpChromeCommand}</code>
+        </div>
+        <CopyCommandButton command={cdpChromeCommand} disabled={isDemo} />
+      </div>
+
+      <div className="setup-note">
+        <span>当前 Runtime</span>
+        <strong>{scanStatus?.runtimeLabel || runtimeHealth?.runtimeLabel || 'auto'}</strong>
+        <small>{runtimeHealth?.headline || '等待健康检查'} · {runtimeHealth?.recommendation || '运行 npm run doctor 查看本机环境。'}</small>
+      </div>
+    </section>
   );
 }
 
@@ -1014,7 +1201,135 @@ function FollowersTable({ followers }: { followers: Follower[] }) {
   );
 }
 
-function RunsTable({ runs }: { runs: ScanRun[] }) {
+function RunDetailPanel({ detail, events, error }: { detail: ScanRunDetail | null; events: FollowerEvent[]; error: string }) {
+  if (error) {
+    return (
+      <div className="run-detail">
+        <div className="scan-error"><AlertTriangle size={16} /><span>{error}</span></div>
+      </div>
+    );
+  }
+  if (!detail) return <div className="run-detail empty-state">选择一条扫描记录查看本次变化</div>;
+
+  const counts = [
+    ['新增', detail.eventCounts.new],
+    ['疑似取关', detail.eventCounts.suspected_removed],
+    ['确认取关', detail.eventCounts.removed],
+    ['重新出现', detail.eventCounts.reappeared],
+    ['改名', detail.eventCounts.renamed]
+  ];
+
+  return (
+    <div className="run-detail">
+      <div className="run-detail-header">
+        <div>
+          <span>Run detail</span>
+          <strong>{detail.runId}</strong>
+          <small>{MODE_LABELS[detail.mode] || detail.mode} · {formatDate(detail.startedAt)} · {detail.reason || 'no-reason'}</small>
+        </div>
+        <StatusPill value={detail.status} />
+      </div>
+      <div className="run-event-counts">
+        {counts.map(([label, value]) => (
+          <div key={label}>
+            <span>{label}</span>
+            <strong>{formatNumber(Number(value))}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="run-event-preview">
+        <span>本次事件预览</span>
+        {events.length ? <EventsTable events={events.slice(0, 6)} /> : <div className="empty-state compact-empty">本次 run 暂无事件</div>}
+      </div>
+    </div>
+  );
+}
+
+function ComparePanel({
+  runs,
+  from,
+  to,
+  result,
+  error,
+  busy,
+  onFromChange,
+  onToChange,
+  onCompare
+}: {
+  runs: ScanRun[];
+  from: string;
+  to: string;
+  result: RunCompareResult | null;
+  error: string;
+  busy: boolean;
+  onFromChange: (value: string) => void;
+  onToChange: (value: string) => void;
+  onCompare: () => void;
+}) {
+  if (!runs.length) return null;
+
+  return (
+    <div className="compare-panel">
+      <div className="compare-controls">
+        <div>
+          <span>快照对比</span>
+          <strong>选择两个 run 查看 added / missing / renamed / reappeared</strong>
+        </div>
+        <label>
+          Baseline
+          <select value={from} onChange={(event) => onFromChange(event.target.value)}>
+            {runs.map((run) => <option value={run.runId} key={run.runId}>{run.runId}</option>)}
+          </select>
+        </label>
+        <label>
+          Target
+          <select value={to} onChange={(event) => onToChange(event.target.value)}>
+            {runs.map((run) => <option value={run.runId} key={run.runId}>{run.runId}</option>)}
+          </select>
+        </label>
+        <button className="button compact" type="button" disabled={!from || !to || busy} onClick={onCompare}>
+          <GitBranch size={15} />对比
+        </button>
+      </div>
+
+      {error && <div className="scan-error"><AlertTriangle size={16} /><span>{error}</span></div>}
+      {result?.warning && <div className="notice warning compare-warning"><AlertTriangle size={16} /><span>{result.warning}</span></div>}
+
+      {result && (
+        <div className="compare-result">
+          <div className="compare-counts">
+            <div><span>Added</span><strong>{formatNumber(result.counts.added)}</strong></div>
+            <div><span>Missing</span><strong>{formatNumber(result.counts.missing)}</strong></div>
+            <div><span>Renamed</span><strong>{formatNumber(result.counts.renamed)}</strong></div>
+            <div><span>Reappeared</span><strong>{formatNumber(result.counts.reappeared)}</strong></div>
+          </div>
+          <div className="compare-lists">
+            <CompareList title="新增" rows={result.added} />
+            <CompareList title="缺失/取关事件" rows={result.missing} />
+            <CompareList title="改名" rows={result.renamed} />
+            <CompareList title="重新出现" rows={result.reappeared} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompareList({ title, rows }: { title: string; rows: FollowerEvent[] }) {
+  return (
+    <div className="compare-list">
+      <span>{title}</span>
+      {rows.length ? rows.slice(0, 5).map((event) => (
+        <div key={event.eventId}>
+          <EventTypePill value={event.type} />
+          <strong>{event.nickname || event.followerId}</strong>
+        </div>
+      )) : <small>无</small>}
+    </div>
+  );
+}
+
+function RunsTable({ runs, selectedRunId, onSelectRun }: { runs: ScanRun[]; selectedRunId: string; onSelectRun: (runId: string) => void }) {
   if (!runs.length) return <div className="empty-state">暂无扫描运行记录</div>;
   return (
     <div className="table-wrap">
@@ -1031,8 +1346,13 @@ function RunsTable({ runs }: { runs: ScanRun[] }) {
         </thead>
         <tbody>
           {runs.map((run) => (
-            <tr key={run.runId}>
-              <td><code>{run.runId}</code><span className="sub-id">{formatDate(run.startedAt)}</span></td>
+            <tr key={run.runId} className={selectedRunId === run.runId ? 'selected-row' : ''}>
+              <td>
+                <button className="run-link" type="button" onClick={() => onSelectRun(run.runId)}>
+                  {run.runId}
+                </button>
+                <span className="sub-id">{formatDate(run.startedAt)}</span>
+              </td>
               <td>{MODE_LABELS[run.mode] || run.mode}</td>
               <td><StatusPill value={run.status} /></td>
               <td>{formatNumber(run.profileFollowerCount)} / {formatNumber(run.enumerableCount)}</td>

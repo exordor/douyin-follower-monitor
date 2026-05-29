@@ -62,7 +62,7 @@ function privacyCheck() {
   return check('privacy-boundary', '安全边界', 'pass', '只做本地诊断，不自动识别、拖动或绕过验证码。');
 }
 
-function buildRuntimeHealth({ scanStatus = {}, cookieAuth = null } = {}) {
+function buildRuntimeHealth({ scanStatus = {}, cookieAuth = null, latestError = null } = {}) {
   const runtime = scanStatus.runtime || 'auto';
   const runtimeLabel = scanStatus.runtimeLabel || runtimeName(runtime);
   const auth = cookieAuth || scanStatus.cookieAuth || null;
@@ -73,6 +73,9 @@ function buildRuntimeHealth({ scanStatus = {}, cookieAuth = null } = {}) {
     runtimeCheck(runtime),
     cookieCheck(runtime, auth),
     verificationCheck(scanStatus),
+    latestError?.errorCode
+      ? check('latest-error', '最近错误', 'warn', `${latestError.errorCode}: ${latestError.suggestion || '请查看 data/latest-error.json 的脱敏摘要。'}`)
+      : check('latest-error', '最近错误', 'pass', '没有记录到最近采集错误。'),
     privacyCheck()
   ];
 

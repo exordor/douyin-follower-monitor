@@ -31,11 +31,20 @@ jobs:
       - name: Check syntax and types
         run: npm run check
 
+      - name: Test doctor
+        run: npm run test:doctor
+
       - name: Test monitor state
         run: npm run test:state
 
       - name: Test dashboard
         run: npm run test:dashboard
+
+      - name: Privacy check
+        run: npm run privacy:check
+
+      - name: Test debug bundle
+        run: npm run test:debug-bundle
 
       - name: Build demo pages
         run: npm run pages:build

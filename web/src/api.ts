@@ -1,5 +1,5 @@
 import mockData from '../demo/mock-data.json';
-import type { CookieAuthStatus, EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent, RuntimeHealthStatus, ScanJobStatus } from './types';
+import type { CookieAuthStatus, EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent, RuntimeHealthStatus, RunCompareResult, ScanJobStatus, ScanRun, ScanRunDetail } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const IS_DEMO = import.meta.env.MODE === 'demo';
@@ -62,11 +62,13 @@ function filterFollowers(params: Params = {}): Page<Follower> {
 function filterEvents(params: Params = {}): Page<FollowerEvent> {
   const page = mockData.events as Page<FollowerEvent>;
   const type = params.type as EventType | undefined;
+  const runId = String(params.runId || '');
   const query = String(params.q || '').trim().toLowerCase();
   const limit = Number(params.limit || page.limit || DEFAULT_PAGE_LIMIT);
   const offset = Number(params.offset || 0);
   const rows = page.rows.filter((row) => {
     if (type && row.type !== type) return false;
+    if (runId && row.runId !== runId) return false;
     if (!query) return true;
     return [row.nickname, row.followerId, row.type].some((value) => String(value || '').toLowerCase().includes(query));
   });
@@ -101,6 +103,61 @@ export async function loadFollowers(params: Params = {}): Promise<Page<Follower>
 export async function loadEvents(params: Params = {}): Promise<Page<FollowerEvent>> {
   if (IS_DEMO) return filterEvents(params);
   return fetchJson('/api/events', { limit: DEFAULT_PAGE_LIMIT, ...params });
+}
+
+export async function loadRunDetail(runId: string): Promise<ScanRunDetail> {
+  if (IS_DEMO) {
+    const run = ((mockData.runs || []) as ScanRun[]).find((item) => item.runId === runId);
+    if (!run) throw new Error('run-not-found');
+    const rows = ((mockData.events as Page<FollowerEvent>).rows || []).filter((event) => event.runId === runId);
+    return {
+      ...run,
+      eventCounts: {
+        new: rows.filter((event) => event.type === 'new').length,
+        renamed: rows.filter((event) => event.type === 'renamed').length,
+        suspected_removed: rows.filter((event) => event.type === 'suspected_removed').length,
+        removed: rows.filter((event) => event.type === 'removed').length,
+        reappeared: rows.filter((event) => event.type === 'reappeared').length
+      }
+    };
+  }
+  return fetchJson(`/api/runs/${encodeURIComponent(runId)}`);
+}
+
+export async function loadRunEvents(runId: string, params: Params = {}): Promise<Page<FollowerEvent>> {
+  if (IS_DEMO) return filterEvents({ ...params, runId });
+  return fetchJson(`/api/runs/${encodeURIComponent(runId)}/events`, { limit: DEFAULT_PAGE_LIMIT, ...params });
+}
+
+export async function loadRunCompare(from: string, to: string): Promise<RunCompareResult> {
+  if (IS_DEMO) {
+    const runs = (mockData.runs || []) as ScanRun[];
+    const fromRun = runs.find((run) => run.runId === from);
+    const toRun = runs.find((run) => run.runId === to);
+    if (!fromRun || !toRun) throw new Error('compare-runs-not-found');
+    const rows = ((mockData.events as Page<FollowerEvent>).rows || []).filter((event) => event.runId === to);
+    const result = {
+      fromRun,
+      toRun,
+      warning: fromRun.mode !== 'full' || toRun.mode !== 'full'
+        ? '包含 recent 扫描时，对比结果只作为事件窗口参考；只有 full 扫描缺失才能作为取关判断。'
+        : '',
+      added: rows.filter((event) => event.type === 'new'),
+      missing: rows.filter((event) => event.type === 'suspected_removed' || event.type === 'removed'),
+      renamed: rows.filter((event) => event.type === 'renamed'),
+      reappeared: rows.filter((event) => event.type === 'reappeared')
+    };
+    return {
+      ...result,
+      counts: {
+        added: result.added.length,
+        missing: result.missing.length,
+        renamed: result.renamed.length,
+        reappeared: result.reappeared.length
+      }
+    };
+  }
+  return fetchJson('/api/compare', { from, to });
 }
 
 export async function loadScanStatus(): Promise<ScanJobStatus> {

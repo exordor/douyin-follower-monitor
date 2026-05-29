@@ -2,6 +2,7 @@
 
 import { createServer } from 'node:http';
 import { createReadStream, existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -18,6 +19,9 @@ import {
   getDashboardEvents,
   getDashboardExport,
   getDashboardFollowers,
+  getDashboardCompare,
+  getDashboardRun,
+  getDashboardRunEvents,
   getDashboardRuns,
   getDashboardSummary,
   getDashboardTimeline
@@ -102,7 +106,6 @@ function sendJson(res, statusCode, value, headers = {}) {
   res.writeHead(statusCode, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
-    'access-control-allow-origin': '*',
     ...headers
   });
   res.end(body);
@@ -111,8 +114,7 @@ function sendJson(res, statusCode, value, headers = {}) {
 function sendText(res, statusCode, contentType, body) {
   res.writeHead(statusCode, {
     'content-type': contentType,
-    'cache-control': 'no-store',
-    'access-control-allow-origin': '*'
+    'cache-control': 'no-store'
   });
   res.end(body);
 }
@@ -138,12 +140,19 @@ function isLoopbackOrigin(origin) {
 
 function corsHeadersFor(req, allowPost = false) {
   const origin = req.headers.origin;
-  const allowOrigin = origin && isLoopbackOrigin(origin) ? origin : '*';
-  return {
-    'access-control-allow-origin': allowOrigin,
+  const headers = {
+    vary: 'Origin',
     'access-control-allow-methods': allowPost ? 'GET, POST, DELETE, OPTIONS' : 'GET, OPTIONS',
     'access-control-allow-headers': 'content-type, x-douyin-dashboard-action'
   };
+  if (origin && isLoopbackOrigin(origin)) headers['access-control-allow-origin'] = origin;
+  return headers;
+}
+
+function applyCorsHeaders(res, req, allowPost = false) {
+  for (const [name, value] of Object.entries(corsHeadersFor(req, allowPost))) {
+    res.setHeader(name, value);
+  }
 }
 
 function allowedDashboardAction(req, expectedAction) {
@@ -174,6 +183,15 @@ function readJsonBody(req, maxBytes = 2 * 1024 * 1024) {
     });
     req.on('error', reject);
   });
+}
+
+async function readJsonIfExists(filePath) {
+  try {
+    return JSON.parse(await readFile(filePath, 'utf8'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    return null;
+  }
 }
 
 async function handleScanApi(req, res, url, scanManager) {
@@ -294,7 +312,8 @@ async function handleApi(req, res, url, options, scanManager) {
       cookieFile: options.cookieFile,
       runtime: scanStatus.runtime || options.runtime || 'auto'
     });
-    sendJson(res, 200, buildRuntimeHealth({ scanStatus, cookieAuth }), corsHeadersFor(req));
+    const latestError = await readJsonIfExists(path.join(options.outDir, 'latest-error.json'));
+    sendJson(res, 200, buildRuntimeHealth({ scanStatus, cookieAuth, latestError }), corsHeadersFor(req));
     return true;
   }
 
@@ -332,6 +351,38 @@ async function handleApi(req, res, url, options, scanManager) {
   }
   if (url.pathname === '/api/runs') {
     sendJson(res, 200, await getDashboardRuns({ ...common, limit: url.searchParams.get('limit') }));
+    return true;
+  }
+  const runEventsMatch = url.pathname.match(/^\/api\/runs\/([^/]+)\/events$/);
+  if (runEventsMatch) {
+    const runId = decodeURIComponent(runEventsMatch[1]);
+    const run = await getDashboardRun({ ...common, runId });
+    if (!run) sendJson(res, 404, { error: 'run-not-found', runId });
+    else sendJson(res, 200, await getDashboardRunEvents({
+      ...common,
+      runId,
+      type: url.searchParams.get('type') || '',
+      limit: url.searchParams.get('limit'),
+      offset: url.searchParams.get('offset')
+    }));
+    return true;
+  }
+  const runMatch = url.pathname.match(/^\/api\/runs\/([^/]+)$/);
+  if (runMatch) {
+    const runId = decodeURIComponent(runMatch[1]);
+    const run = await getDashboardRun({ ...common, runId });
+    if (!run) sendJson(res, 404, { error: 'run-not-found', runId });
+    else sendJson(res, 200, run);
+    return true;
+  }
+  if (url.pathname === '/api/compare') {
+    const compared = await getDashboardCompare({
+      ...common,
+      from: url.searchParams.get('from') || '',
+      to: url.searchParams.get('to') || ''
+    });
+    if (!compared) sendJson(res, 404, { error: 'compare-runs-not-found' });
+    else sendJson(res, 200, compared);
     return true;
   }
   if (url.pathname === '/api/export/latest.json' || url.pathname === '/api/export/latest.csv') {
@@ -374,12 +425,23 @@ function createDashboardServer(options = {}) {
 
   return createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${resolvedOptions.host}:${resolvedOptions.port}`);
+    const isApiPath = url.pathname.startsWith('/api/');
     const isScanPath = url.pathname.startsWith('/api/scan/');
     const isAuthPath = url.pathname.startsWith('/api/auth/cookies');
+    const allowApiPost = isScanPath || isAuthPath;
+
+    if (isApiPath && !isLoopbackOrigin(req.headers.origin)) {
+      sendJson(res, 403, { error: 'api-origin-forbidden' });
+      return;
+    }
+
+    if (isApiPath) {
+      applyCorsHeaders(res, req, allowApiPost);
+    }
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
-        ...corsHeadersFor(req, isScanPath || isAuthPath)
+        ...corsHeadersFor(req, allowApiPost)
       });
       res.end();
       return;

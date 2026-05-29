@@ -39,12 +39,12 @@ try {
         async readPageInfo() {
           reads += 1;
           if (reads === 1) throw new Error('page.evaluate: Execution context was destroyed, most likely because of a navigation');
-          return { title: 'Dead Man 的抖音', text: '粉丝 803 作品 95' };
+          return { title: '示例创作者的抖音', text: '粉丝 803 作品 95' };
         }
       }
     }, { title: '验证码中间页', text: '请完成下列验证后继续' });
 
-    assert.equal(pageInfo.title, 'Dead Man 的抖音');
+    assert.equal(pageInfo.title, '示例创作者的抖音');
   });
 
   const resolvedEvents = parseEvents(resolvedLogs);

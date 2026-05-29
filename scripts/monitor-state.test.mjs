@@ -48,6 +48,8 @@ async function withDb(fn) {
 }
 
 await withDb(async (db) => {
+  assert.equal(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get().value, '1');
+
   const x = follower('sec-x', '用户 X');
   const y = follower('sec-y', '用户 Y');
 

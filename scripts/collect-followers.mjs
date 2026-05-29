@@ -7,6 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import readline from 'node:readline/promises';
 
 import { createBrowserRuntime, resolveBrowserRuntimeConfig } from './browser-runtime.mjs';
+import { classifyCollectorError, errorSuggestion, publicErrorMessage } from './collector-errors.mjs';
+import { buildNotificationPayload, parseNotifyConfig, sendNotification } from './notify.mjs';
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_TARGET = 'https://www.douyin.com/user/self';
@@ -39,6 +41,7 @@ function parseArgs(argv) {
     slowMo: 40,
     checkpointEvery: 1,
     authWaitSeconds: Number.parseInt(process.env.DOUYIN_AUTH_WAIT_SECONDS || '0', 10),
+    notify: process.env.DOUYIN_NOTIFY || 'none',
     help: false
   };
 
@@ -73,6 +76,7 @@ function parseArgs(argv) {
     else if (arg === '--slow-mo') options.slowMo = Number.parseInt(next(), 10);
     else if (arg === '--checkpoint-every') options.checkpointEvery = Number.parseInt(next(), 10);
     else if (arg === '--auth-wait-seconds') options.authWaitSeconds = Number.parseInt(next(), 10);
+    else if (arg === '--notify') options.notify = next();
     else if (arg === '--api-source-type') options.apiSourceType = Number.parseInt(next(), 10);
     else if (arg === '--headless') options.headless = true;
     else if (arg === '--manual') options.manual = true;
@@ -112,6 +116,7 @@ function parseArgs(argv) {
   if (options.confirmRemoveScans < 2) {
     throw new Error('--confirm-remove-scans must be at least 2');
   }
+  parseNotifyConfig({ notify: options.notify });
 
   return options;
 }
@@ -144,6 +149,7 @@ Options:
   --checkpoint-every <n> Save partial progress after this many new rows (default: 1, 0 disables periodic saves)
   --auth-wait-seconds <n>
                          Wait this long for manual login/captcha in non-TTY browser runtime (default: 0)
+  --notify <mode>        Completion notification: none, macos, webhook, bark (default: none)
   --headless             Run headless; not recommended for login
   --help                 Show this message
 `);
@@ -997,6 +1003,11 @@ async function openMonitorDatabase(dbPath) {
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
 
+    CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS followers (
       id TEXT PRIMARY KEY,
       uid TEXT,
@@ -1037,6 +1048,11 @@ async function openMonitorDatabase(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_scan_runs_mode_status ON scan_runs(mode, status, startedAt);
     CREATE INDEX IF NOT EXISTS idx_follower_events_follower ON follower_events(followerId, createdAt);
   `);
+  db.prepare(`
+    INSERT INTO meta (key, value)
+    VALUES ('schema_version', '1')
+    ON CONFLICT(key) DO NOTHING
+  `).run();
   return db;
 }
 
@@ -1462,6 +1478,8 @@ async function persistProgress(options, followers, metadata = {}) {
     round: metadata.round || null,
     pagesFetched: options.pagesFetched || metadata.round || 0,
     containerLabel: metadata.containerLabel || '',
+    errorCode: metadata.errorCode || null,
+    errorMessage: metadata.errorMessage || '',
     count: followers.length,
     followers
   };
@@ -1470,6 +1488,43 @@ async function persistProgress(options, followers, metadata = {}) {
   await writeTextAtomic(path.join(inProgressDir, 'latest.partial.json'), `${JSON.stringify(snapshot, null, 2)}\n`);
   await writeTextAtomic(path.join(inProgressDir, 'latest.partial.csv'), toCsv(followers));
   await writeTextAtomic(path.join(inProgressDir, `followers-${runStamp}.partial.json`), `${JSON.stringify(snapshot, null, 2)}\n`);
+}
+
+async function persistCollectorError(options, error) {
+  const collectedAt = new Date().toISOString();
+  const code = classifyCollectorError(error);
+  const latestError = {
+    collectedAt,
+    runId: options.runId || '',
+    mode: options.effectiveMode || options.mode || '',
+    requestedMode: options.mode || '',
+    runtime: options.runtime || '',
+    runtimeLabel: options.runtimeLabel || '',
+    errorCode: code,
+    message: publicErrorMessage(error),
+    suggestion: errorSuggestion(code)
+  };
+  await mkdir(options.outDir, { recursive: true });
+  await writeTextAtomic(path.join(options.outDir, 'latest-error.json'), `${JSON.stringify(latestError, null, 2)}\n`);
+  await writeTextAtomic(path.join(options.outDir, 'latest-change.json'), `${JSON.stringify({
+    ...latestError,
+    status: 'failed',
+    currentCount: options.currentFollowers?.length || 0,
+    newCount: 0,
+    addedCount: 0,
+    suspectedRemovedCount: 0,
+    removedCount: 0,
+    renamedCount: 0,
+    reappearedCount: 0,
+    hiddenOrUnavailableCount: null
+  }, null, 2)}\n`);
+  await persistProgress(options, options.currentFollowers || [], {
+    status: 'failed',
+    force: true,
+    errorCode: code,
+    errorMessage: publicErrorMessage(error)
+  });
+  return latestError;
 }
 
 async function maybePersistProgress(options, followers, state, metadata = {}) {
@@ -1495,6 +1550,7 @@ async function persistResult(options, followers) {
 
   const snapshot = {
     collectedAt,
+    runId: options.runId || '',
     target: options.target,
     runtime: options.runtime || '',
     runtimeLabel: options.runtimeLabel || '',
@@ -1518,6 +1574,7 @@ async function persistResult(options, followers) {
   if (options.monitorChange) {
     change = {
       collectedAt,
+      runId: options.runId || '',
       previousCollectedAt: previousSnapshot?.collectedAt || null,
       mode: options.monitorChange.mode,
       requestedMode: options.mode,
@@ -1550,6 +1607,7 @@ async function persistResult(options, followers) {
       : { added: [], removed: [], renamed: [] };
     change = {
       collectedAt,
+      runId: options.runId || '',
       previousCollectedAt: previousSnapshot?.collectedAt || null,
       mode: options.effectiveMode || options.mode,
       requestedMode: options.mode,
@@ -1764,6 +1822,17 @@ async function prepareBrowserRuntime(options) {
   await waitForManualAuthIfNeeded(options, pageInfo);
 }
 
+async function notifyCompletion(options, followers, change, status = 'completed') {
+  const payload = buildNotificationPayload({ options, followers, change, status });
+  try {
+    const result = await sendNotification(payload, { notify: options.notify });
+    if (result.skipped && result.reason !== 'disabled') console.warn(`通知已跳过: ${result.reason}`);
+    else if (!result.skipped) console.log(`通知已发送: ${result.channel}`);
+  } catch (error) {
+    console.warn(`通知发送失败: ${error.message}`);
+  }
+}
+
 async function readPageProfileStats(page) {
   let lastStats = null;
   for (let attempt = 1; attempt <= 8; attempt += 1) {
@@ -1878,6 +1947,13 @@ async function main() {
           pagesFetched: options.pagesFetched || 0
         });
       }
+      await persistCollectorError(options, error).catch((persistError) => {
+        console.error(`保存错误摘要失败: ${persistError.message}`);
+      });
+      await notifyCompletion(options, options.currentFollowers || [], {
+        errorCode: classifyCollectorError(error),
+        collectedAt: new Date().toISOString()
+      }, 'failed');
       throw error;
     } finally {
       options.monitorDb = null;
@@ -1895,6 +1971,7 @@ async function main() {
     console.log(`当前采集数量: ${followers.length}`);
     printProfileCountWarning(options.profileStats, followers);
     printDiffSummary(change);
+    await notifyCompletion(options, followers, change, 'completed');
     return;
   }
 
@@ -1941,6 +2018,7 @@ async function main() {
     console.log(`当前采集数量: ${followers.length}`);
     printProfileCountWarning(options.profileStats, followers);
     printDiffSummary(change);
+    await notifyCompletion(options, followers, change, 'completed');
   } finally {
     await context.close();
   }

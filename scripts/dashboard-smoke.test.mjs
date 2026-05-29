@@ -114,6 +114,22 @@ const server = createDashboardServer({
   staticDir: path.resolve('web/dist')
 });
 await listen(server, port, '127.0.0.1');
+const missingRunResponse = await fetch(`http://127.0.0.1:${port}/api/runs/missing-run`);
+assert.equal(missingRunResponse.status, 404);
+const attackerRunEvents = await fetch(`http://127.0.0.1:${port}/api/runs/smoke-a/events`, {
+  headers: { origin: 'https://attacker.example' }
+});
+assert.equal(attackerRunEvents.status, 403);
+assert.equal(attackerRunEvents.headers.get('access-control-allow-origin'), null);
+const attackerCompare = await fetch(`http://127.0.0.1:${port}/api/compare?from=smoke-a&to=smoke-b`, {
+  headers: { origin: 'https://attacker.example' }
+});
+assert.equal(attackerCompare.status, 403);
+const loopbackRunEvents = await fetch(`http://127.0.0.1:${port}/api/runs/smoke-a/events`, {
+  headers: { origin: 'http://127.0.0.1:5173' }
+});
+assert.equal(loopbackRunEvents.status, 200);
+assert.equal(loopbackRunEvents.headers.get('access-control-allow-origin'), 'http://127.0.0.1:5173');
 
 const browser = await chromium.launch();
 try {
@@ -124,14 +140,20 @@ try {
   await expectText(page, '粉丝变化仪表盘');
   await expectText(page, '可枚举粉丝');
   await expectText(page, '粉丝趋势');
+  await expectText(page, 'Setup / 快速开始');
+  await expectText(page, 'Runtime 健康');
   await expectText(page, '粉丝事件');
   await expectText(page, '晨间剪辑师');
+  await expectText(page, 'Run detail');
+  await page.getByRole('button', { name: /对比/ }).click();
+  await expectText(page, 'Added');
   assert.equal(await page.locator('svg.chart').count() >= 2, true);
   assert.equal(await page.locator('table').count() >= 3, true);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectText(page, '粉丝变化仪表盘');
+  await expectText(page, 'Setup / 快速开始');
   assert.equal(await page.locator('body').evaluate((body) => body.scrollWidth <= window.innerWidth + 2), true);
 
   const waitingPort = await getFreePort();
@@ -229,8 +251,7 @@ function createWaitingScanManager() {
       res.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-store',
-        connection: 'keep-alive',
-        'access-control-allow-origin': '*'
+        connection: 'keep-alive'
       });
       res.write(`event: status\ndata: ${JSON.stringify(status)}\n\n`);
     }

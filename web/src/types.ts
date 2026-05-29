@@ -16,6 +16,32 @@ export interface ScanRun {
   reason: string;
 }
 
+export interface ScanRunDetail extends ScanRun {
+  eventCounts: {
+    new: number;
+    renamed: number;
+    suspected_removed: number;
+    removed: number;
+    reappeared: number;
+  };
+}
+
+export interface RunCompareResult {
+  fromRun: ScanRun;
+  toRun: ScanRun;
+  warning: string;
+  counts: {
+    added: number;
+    missing: number;
+    renamed: number;
+    reappeared: number;
+  };
+  added: FollowerEvent[];
+  missing: FollowerEvent[];
+  renamed: FollowerEvent[];
+  reappeared: FollowerEvent[];
+}
+
 export interface Follower {
   id: string;
   uid: string;

@@ -516,8 +516,7 @@ function createScanJobManager({
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-store',
-      connection: 'keep-alive',
-      'access-control-allow-origin': req.headers.origin || '*'
+      connection: 'keep-alive'
     });
     res.write(`event: status\ndata: ${JSON.stringify(await status())}\n\n`);
 
