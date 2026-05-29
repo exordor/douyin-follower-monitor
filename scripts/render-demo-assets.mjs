@@ -199,20 +199,32 @@ function run(command, args) {
 async function renderMarketingAssets() {
   await mkdir(PUBLIC_DIR, { recursive: true });
   const browser = await chromium.launch();
-  const framesDir = await mkdtemp(path.join(os.tmpdir(), 'douyin-terminal-frames-'));
   try {
     await screenshotHtml(browser, readmeHeroHtml(), path.join(PUBLIC_DIR, 'readme-hero.png'), { width: 1600, height: 900 });
     await screenshotHtml(browser, socialHtml(), path.join(PUBLIC_DIR, 'social-preview.png'), { width: 1280, height: 640 });
+    await renderTerminalDemo(browser);
+  } finally {
+    await browser.close();
+  }
+}
 
+async function renderTerminalDemo(browser) {
+  const framesDir = await mkdtemp(path.join(os.tmpdir(), 'douyin-terminal-frames-'));
+  try {
     const lines = [
+      '<b>$</b> npm run doctor',
+      'Doctor: <b>warning</b> · Node 24 OK · SQLite OK · Playwright OK',
+      'Action: configure CDP or import cookie before first scan',
+      '<b>$</b> npm run dashboard',
+      'Setup: CDP recommended · Playwright + Cookie supported',
+      'Runtime health: <b>Playwright profile</b> · cookie configured 66/89',
       '<b>$</b> npm run monitor',
-      '扫描模式: <b>recent</b> (recent-window)',
+      'phase: <em>waiting_for_verification</em> · manual captcha only',
       'API 第 1 页: 本页 20，累计 20，hasMore=true',
-      'API 第 5 页: 本页 20，累计 100，hasMore=true',
-      '已保存进度: 100 -> data/in-progress/latest.partial.json',
-      '新增: <b>37</b>，疑似取关: <em>8</em>，确认取关: <em>2</em>，改名: 4',
-      '主页粉丝数与可枚举列表差值: <em>126</em>',
-      'Dashboard: http://127.0.0.1:4573'
+      'partial saved: data/in-progress/latest.partial.json',
+      '完成: 新增 0 · 疑似 0 · 确认 0 · 隐藏差值 0',
+      '<b>$</b> npm run privacy:check && npm run debug:bundle',
+      'privacy passed · debug/douyin-monitor-debug-*.zip sanitized'
     ];
     for (let index = 0; index < lines.length; index += 1) {
       await screenshotHtml(
@@ -222,20 +234,33 @@ async function renderMarketingAssets() {
         { width: 960, height: 540 }
       );
     }
+    const framePattern = path.join(framesDir, 'frame-%03d.png');
+    const palettePath = path.join(framesDir, 'palette.png');
     await run('ffmpeg', [
       '-y',
       '-framerate',
       '2',
       '-i',
-      path.join(framesDir, 'frame-%03d.png'),
+      framePattern,
       '-vf',
-      'fps=8,scale=960:-1:flags=lanczos',
+      'fps=8,scale=960:-1:flags=lanczos,palettegen=stats_mode=diff',
+      palettePath
+    ]);
+    await run('ffmpeg', [
+      '-y',
+      '-framerate',
+      '2',
+      '-i',
+      framePattern,
+      '-i',
+      palettePath,
+      '-lavfi',
+      'fps=8,scale=960:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5',
       '-loop',
       '0',
       path.join(PUBLIC_DIR, 'terminal-demo.gif')
     ]);
   } finally {
-    await browser.close();
     await rm(framesDir, { recursive: true, force: true });
   }
 }
@@ -307,6 +332,17 @@ async function renderDiagrams() {
   }
 }
 
-await renderMarketingAssets();
-await renderDiagrams();
-console.log('demo assets rendered');
+if (process.argv.includes('--terminal-only')) {
+  await mkdir(PUBLIC_DIR, { recursive: true });
+  const browser = await chromium.launch();
+  try {
+    await renderTerminalDemo(browser);
+  } finally {
+    await browser.close();
+  }
+  console.log('terminal demo rendered');
+} else {
+  await renderMarketingAssets();
+  await renderDiagrams();
+  console.log('demo assets rendered');
+}

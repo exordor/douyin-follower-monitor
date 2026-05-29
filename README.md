@@ -13,7 +13,7 @@
 
 ## Demo
 
-![Terminal demo](web/public/terminal-demo.gif)
+![Setup and monitor demo](web/public/terminal-demo.gif)
 
 ```bash
 npm install
