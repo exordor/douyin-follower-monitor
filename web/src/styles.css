@@ -375,6 +375,88 @@ a {
   font-size: 13px;
 }
 
+.scan-config-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.scan-config-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.scan-config-label {
+  min-width: 0;
+}
+
+.scan-config-label span {
+  display: block;
+  color: #667282;
+  font-size: 12px;
+}
+
+.scan-config-label strong {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: #15181e;
+  font-size: 13px;
+}
+
+.segmented-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.segmented-button {
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  color: #425066;
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.segmented-button.selected {
+  border-color: #14b8a6;
+  color: #0f766e;
+  background: #ccfbf1;
+  font-weight: 700;
+}
+
+.segmented-button:disabled {
+  cursor: not-allowed;
+  color: #9aa5b4;
+  background: #f0f3f7;
+}
+
+.scan-config-cdp {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scan-config-cdp input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  color: #26313e;
+  background: #ffffff;
+  font-size: 13px;
+}
+
 .scan-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1390,9 +1472,14 @@ td code,
   .runtime-command,
   .setup-command,
   .setup-helper,
-  .run-detail-header {
+  .run-detail-header,
+  .scan-config-cdp {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .scan-config-row {
+    grid-template-columns: 1fr;
   }
 
   .runtime-health-recommendation {
@@ -1460,6 +1547,7 @@ td code,
   }
 
   .search-box,
+  .scan-config-cdp input,
   select,
   .command,
   .button {

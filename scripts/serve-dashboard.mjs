@@ -204,6 +204,31 @@ async function handleScanApi(req, res, url, scanManager) {
     return true;
   }
 
+  if (url.pathname === '/api/scan/config') {
+    if (req.method === 'GET') {
+      sendJson(res, 200, await scanManager.config(), corsHeadersFor(req));
+      return true;
+    }
+    if (req.method !== 'POST') {
+      sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req, true));
+      return true;
+    }
+    if (!allowedDashboardAction(req, 'scan')) {
+      sendJson(res, 403, { error: 'scan-post-forbidden' }, corsHeadersFor(req, true));
+      return true;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message }, corsHeadersFor(req, true));
+      return true;
+    }
+    const result = await scanManager.updateConfig(body);
+    sendJson(res, result.statusCode, result.body, corsHeadersFor(req, true));
+    return true;
+  }
+
   if (url.pathname === '/api/scan/status') {
     if (req.method !== 'GET') {
       sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req));

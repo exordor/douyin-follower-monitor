@@ -5,7 +5,7 @@ export default defineConfig(({ mode }) => ({
   base: mode === 'demo' ? '/douyin-follower-monitor/' : '/',
   plugins: [react()],
   build: {
-    outDir: 'dist',
+    outDir: mode === 'demo' ? 'dist-demo' : 'dist',
     emptyOutDir: true,
     cssMinify: false
   },

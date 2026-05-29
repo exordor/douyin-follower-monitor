@@ -1,6 +1,7 @@
 node_modules/
 dist/
 web/dist/
+web/dist-demo/
 coverage/
 .cache/
 .vite/

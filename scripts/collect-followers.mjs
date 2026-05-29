@@ -1815,7 +1815,7 @@ async function prepareBrowserRuntime(options) {
   options.cookieAuth = options.browserRuntime.cookieAuthSummary || null;
   const cookieLog = formatCookieAuthLog(options.cookieAuth);
   if (cookieLog) console.log(cookieLog);
-  if (openResult === 'found') console.log('已切换到可用的抖音页面。');
+  if (openResult === 'found') console.log('已找到可用的抖音页面。');
   else if (openResult === 'opened') console.log('已打开抖音个人页。');
 
   const pageInfo = await options.browserRuntime.readPageInfo();

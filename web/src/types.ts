@@ -199,6 +199,26 @@ export interface ScanJobStatus {
   partial: ScanJobPartial | null;
 }
 
+export interface ScanConfigOption {
+  value: string;
+  label: string;
+  detail: string;
+}
+
+export interface ScanConfig {
+  runtime: string;
+  runtimeLabel: string;
+  mode: string;
+  cdpUrl: string;
+  browserApp: string;
+  cookieRuntimeSupported: boolean;
+  canEdit: boolean;
+  options: {
+    runtimes: ScanConfigOption[];
+    modes: ScanConfigOption[];
+  };
+}
+
 export type RuntimeHealthLevel = 'ok' | 'warning' | 'action';
 export type RuntimeHealthCheckState = 'pass' | 'warn' | 'fail' | 'info';
 

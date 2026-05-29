@@ -10,6 +10,20 @@ import { defaultCookieFile, getCookieAuthStatus } from './cookie-auth.mjs';
 const MAX_LOG_LINES = 120;
 const MONITOR_EVENT_PREFIX = '__DOUYIN_MONITOR_EVENT__ ';
 const DEFAULT_AUTH_WAIT_SECONDS = 300;
+const DEFAULT_CDP_URL = 'http://127.0.0.1:9222';
+const DEFAULT_BROWSER_APP = 'com.bot.pc.doubao.browser';
+const ALLOWED_DASHBOARD_RUNTIMES = new Set(['playwright', 'cdp', 'apple-events']);
+const ALLOWED_SCAN_MODES = new Set(['monitor', 'recent', 'full']);
+const RUNTIME_OPTIONS = [
+  { value: 'apple-events', label: '豆包浏览器', detail: 'macOS Apple Events 复用当前浏览器' },
+  { value: 'cdp', label: 'CDP', detail: '连接已登录 Chrome/Edge/Chromium' },
+  { value: 'playwright', label: 'Playwright', detail: '持久 profile，可配合 Cookie 导入' }
+];
+const MODE_OPTIONS = [
+  { value: 'monitor', label: '自动', detail: '自动决策 recent/full' },
+  { value: 'recent', label: '轻量', detail: '只扫最近窗口' },
+  { value: 'full', label: '全量', detail: '完整分页并判断取关' }
+];
 
 function nowId(date = new Date()) {
   return date.toISOString().replaceAll(':', '-').replaceAll('.', '-');
@@ -17,6 +31,44 @@ function nowId(date = new Date()) {
 
 function trimLogLines(lines) {
   return lines.slice(Math.max(0, lines.length - MAX_LOG_LINES));
+}
+
+function normalizeDashboardRuntime(value) {
+  const runtime = String(value || '').trim().toLowerCase();
+  if (!ALLOWED_DASHBOARD_RUNTIMES.has(runtime)) {
+    throw new Error('runtime-must-be-playwright-cdp-or-apple-events');
+  }
+  return runtime;
+}
+
+function normalizeScanMode(value) {
+  const mode = String(value || '').trim().toLowerCase();
+  if (!ALLOWED_SCAN_MODES.has(mode)) {
+    throw new Error('mode-must-be-monitor-recent-or-full');
+  }
+  return mode;
+}
+
+function normalizeCdpUrl(value) {
+  const text = String(value || '').trim() || DEFAULT_CDP_URL;
+  let parsed;
+  try {
+    parsed = new URL(text);
+  } catch {
+    throw new Error('cdp-url-must-be-loopback-http-url');
+  }
+  if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname)) {
+    throw new Error('cdp-url-must-be-loopback-http-url');
+  }
+  return parsed.toString().replace(/\/$/, '');
+}
+
+function initialDashboardRuntime(runtime, cdpUrl, browserApp) {
+  const requested = String(runtime || 'auto').trim().toLowerCase();
+  if (ALLOWED_DASHBOARD_RUNTIMES.has(requested)) return requested;
+  if (browserApp) return 'apple-events';
+  if (cdpUrl) return 'cdp';
+  return 'playwright';
 }
 
 function phaseFromStatus(status) {
@@ -320,14 +372,52 @@ function createScanJobManager({
   const clients = new Set();
   let currentJob = null;
   let lastJob = null;
-  const runtimeConfig = resolveBrowserRuntimeConfig(
-    { runtime, profile, cdpUrl, browserApp, cookieFile: '' },
-    { ...process.env, DOUYIN_COOKIE_FILE: '' }
-  );
-  const supportsCookieAuth = runtimeConfig.runtime === 'playwright' || runtimeConfig.runtime === 'cdp';
   const resolvedAuthWaitSeconds = Number.isFinite(authWaitSeconds) && authWaitSeconds >= 0
     ? authWaitSeconds
     : DEFAULT_AUTH_WAIT_SECONDS;
+  let scanConfig = {
+    runtime: initialDashboardRuntime(runtime, cdpUrl, browserApp),
+    mode: 'monitor',
+    profile,
+    cdpUrl: cdpUrl ? normalizeCdpUrl(cdpUrl) : DEFAULT_CDP_URL,
+    browserApp: browserApp || DEFAULT_BROWSER_APP,
+    cookieFile,
+    authWaitSeconds: resolvedAuthWaitSeconds
+  };
+
+  function resolveCurrentRuntimeConfig() {
+    return resolveBrowserRuntimeConfig(
+      {
+        runtime: scanConfig.runtime,
+        profile: scanConfig.profile,
+        cdpUrl: scanConfig.runtime === 'cdp' ? normalizeCdpUrl(scanConfig.cdpUrl) : scanConfig.cdpUrl,
+        browserApp: scanConfig.runtime === 'apple-events' ? (scanConfig.browserApp || DEFAULT_BROWSER_APP) : scanConfig.browserApp,
+        cookieFile: ''
+      },
+      { ...process.env, DOUYIN_COOKIE_FILE: '' }
+    );
+  }
+
+  function runtimeSupportsCookieAuth(runtimeName) {
+    return runtimeName === 'playwright' || runtimeName === 'cdp';
+  }
+
+  function getConfig() {
+    const runtimeConfig = resolveCurrentRuntimeConfig();
+    return {
+      runtime: runtimeConfig.runtime,
+      runtimeLabel: runtimeConfig.runtimeLabel,
+      mode: scanConfig.mode,
+      cdpUrl: scanConfig.cdpUrl,
+      browserApp: runtimeConfig.browserApp || '',
+      cookieRuntimeSupported: runtimeSupportsCookieAuth(runtimeConfig.runtime),
+      canEdit: !isActive(currentJob),
+      options: {
+        runtimes: RUNTIME_OPTIONS,
+        modes: MODE_OPTIONS
+      }
+    };
+  }
 
   function isActive(job) {
     return job && ['starting', 'running', 'stopping'].includes(job.status);
@@ -347,6 +437,7 @@ function createScanJobManager({
   }
 
   async function enrichStatus(status) {
+    const runtimeConfig = resolveCurrentRuntimeConfig();
     const partial = await readJsonIfExists(path.join(outDir, 'in-progress', 'latest.partial.json'));
     if (partial) {
       const partialSummary = partialSummaryFromSnapshot(partial);
@@ -357,7 +448,7 @@ function createScanJobManager({
       status.runtimeLabel = runtimeConfig.runtimeLabel;
     }
     status.cookieAuth = await getCookieAuthStatus({
-      cookieFile,
+      cookieFile: scanConfig.cookieFile,
       runtime: runtimeConfig.runtime
     });
     return status;
@@ -372,11 +463,13 @@ function createScanJobManager({
       return { statusCode: 409, body: { error: 'scan-already-running', status: await status() } };
     }
 
+    const runtimeConfig = resolveCurrentRuntimeConfig();
+    const supportsCookieAuth = runtimeSupportsCookieAuth(runtimeConfig.runtime);
     const job = {
       id: `scan-${nowId()}`,
       status: 'starting',
-      mode: 'monitor',
-      requestedMode: 'monitor',
+      mode: scanConfig.mode,
+      requestedMode: scanConfig.mode,
       reason: '',
       startedAt: new Date().toISOString(),
       finishedAt: null,
@@ -386,7 +479,7 @@ function createScanJobManager({
       hiddenOrUnavailableCount: null,
       runtime: runtimeConfig.runtime,
       runtimeLabel: runtimeConfig.runtimeLabel,
-      cookieAuth: await getCookieAuthStatus({ cookieFile, runtime: runtimeConfig.runtime }),
+      cookieAuth: await getCookieAuthStatus({ cookieFile: scanConfig.cookieFile, runtime: runtimeConfig.runtime }),
       phase: 'starting',
       authChallenge: null,
       exitCode: null,
@@ -410,9 +503,9 @@ function createScanJobManager({
       runtimeConfig.runtime,
       '--api',
       '--mode',
-      'monitor',
+      scanConfig.mode,
       '--auth-wait-seconds',
-      String(resolvedAuthWaitSeconds),
+      String(scanConfig.authWaitSeconds),
       '--db',
       db,
       '--out-dir',
@@ -421,10 +514,10 @@ function createScanJobManager({
     if (runtimeConfig.profile) args.push('--profile', runtimeConfig.profile);
     if (runtimeConfig.cdpUrl) args.push('--cdp-url', runtimeConfig.cdpUrl);
     if (runtimeConfig.browserApp) args.push('--browser-app', runtimeConfig.browserApp);
-    if (supportsCookieAuth && job.cookieAuth?.configured) args.push('--cookie-file', cookieFile);
+    if (supportsCookieAuth && job.cookieAuth?.configured) args.push('--cookie-file', scanConfig.cookieFile);
 
     const childEnv = { ...process.env, DOUYIN_COOKIE_FILE: '' };
-    if (supportsCookieAuth && job.cookieAuth?.configured) childEnv.DOUYIN_COOKIE_FILE = cookieFile;
+    if (supportsCookieAuth && job.cookieAuth?.configured) childEnv.DOUYIN_COOKIE_FILE = scanConfig.cookieFile;
 
     const child = spawnImpl(nodePath, args, {
       cwd: rootDir,
@@ -511,6 +604,30 @@ function createScanJobManager({
     return { statusCode: 202, body: { status: await status() } };
   }
 
+  async function updateConfig(patch = {}) {
+    if (isActive(currentJob)) {
+      return { statusCode: 409, body: { error: 'scan-config-locked-while-running', config: getConfig(), status: await status() } };
+    }
+
+    const previous = scanConfig;
+    try {
+      const next = { ...scanConfig };
+      if (patch.runtime !== undefined) next.runtime = normalizeDashboardRuntime(patch.runtime);
+      if (patch.mode !== undefined) next.mode = normalizeScanMode(patch.mode);
+      if (patch.cdpUrl !== undefined) next.cdpUrl = normalizeCdpUrl(patch.cdpUrl);
+      if (next.runtime === 'cdp') next.cdpUrl = normalizeCdpUrl(next.cdpUrl);
+      if (next.runtime === 'apple-events') next.browserApp = next.browserApp || DEFAULT_BROWSER_APP;
+
+      scanConfig = next;
+      const config = getConfig();
+      emitStatus();
+      return { statusCode: 200, body: { config, status: await status() } };
+    } catch (error) {
+      scanConfig = previous;
+      return { statusCode: 400, body: { error: error.message, config: getConfig() } };
+    }
+  }
+
   async function subscribe(req, res) {
     clients.add(res);
     res.writeHead(200, {
@@ -546,6 +663,8 @@ function createScanJobManager({
     start,
     stop,
     status,
+    config: async () => getConfig(),
+    updateConfig,
     subscribe,
     _emitter: emitter
   };

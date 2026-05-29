@@ -1,5 +1,5 @@
 import mockData from '../demo/mock-data.json';
-import type { CookieAuthStatus, EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent, RuntimeHealthStatus, RunCompareResult, ScanJobStatus, ScanRun, ScanRunDetail } from './types';
+import type { CookieAuthStatus, EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent, RuntimeHealthStatus, RunCompareResult, ScanConfig, ScanJobStatus, ScanRun, ScanRunDetail } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const IS_DEMO = import.meta.env.MODE === 'demo';
@@ -198,6 +198,37 @@ export async function loadScanStatus(): Promise<ScanJobStatus> {
     };
   }
   return fetchJson('/api/scan/status');
+}
+
+export async function loadScanConfig(): Promise<ScanConfig> {
+  if (IS_DEMO) {
+    return {
+      runtime: 'demo',
+      runtimeLabel: 'Demo data',
+      mode: 'monitor',
+      cdpUrl: 'http://127.0.0.1:9222',
+      browserApp: '',
+      cookieRuntimeSupported: false,
+      canEdit: false,
+      options: {
+        runtimes: [
+          { value: 'apple-events', label: '豆包浏览器', detail: 'macOS Apple Events 复用当前浏览器' },
+          { value: 'cdp', label: 'CDP', detail: '连接已登录 Chrome/Edge/Chromium' },
+          { value: 'playwright', label: 'Playwright', detail: '持久 profile，可配合 Cookie 导入' }
+        ],
+        modes: [
+          { value: 'monitor', label: '自动', detail: '自动决策 recent/full' },
+          { value: 'recent', label: '轻量', detail: '只扫最近窗口' },
+          { value: 'full', label: '全量', detail: '完整分页并判断取关' }
+        ]
+      }
+    };
+  }
+  return fetchJson('/api/scan/config');
+}
+
+export async function updateScanConfig(patch: Partial<Pick<ScanConfig, 'runtime' | 'mode' | 'cdpUrl'>>): Promise<{ config: ScanConfig; status: ScanJobStatus }> {
+  return mutateJson('/api/scan/config', 'POST', 'scan', patch);
 }
 
 export async function startScanJob(): Promise<{ status: ScanJobStatus }> {

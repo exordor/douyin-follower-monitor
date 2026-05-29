@@ -142,29 +142,16 @@ class AppleEventsRuntime {
   async openOrFocusTarget(target = DEFAULT_TARGET) {
     const script = `
 tell application ${appleScriptTarget(this.browserApp)}
-  activate
-  set foundTab to false
   repeat with w in windows
-    set tabIndex to 1
     repeat with t in tabs of w
       try
-        if (URL of t contains "douyin.com") then
-          set active tab index of w to tabIndex
-          set index of w to 1
-          set foundTab to true
-          exit repeat
-        end if
+        if (URL of t contains "douyin.com") then return "found"
       end try
-      set tabIndex to tabIndex + 1
     end repeat
-    if foundTab then exit repeat
   end repeat
-  if foundTab then return "found"
   if (count windows) is 0 then make new window
   set targetWindow to front window
   make new tab at end of tabs of targetWindow with properties {URL:"${String(target).replaceAll('"', '\\"')}"}
-  set active tab index of targetWindow to (count tabs of targetWindow)
-  set index of targetWindow to 1
   return "opened"
 end tell`;
 
@@ -180,7 +167,18 @@ end tell`;
 
     const appleScript = [
       `set jsCode to read POSIX file "${jsPath.replaceAll('"', '\\"')}" as «class utf8»`,
-      `tell application ${appleScriptTarget(this.browserApp)} to execute active tab of front window javascript jsCode`
+      `tell application ${appleScriptTarget(this.browserApp)}`,
+      '  repeat with w in windows',
+      '    repeat with t in tabs of w',
+      '      try',
+      '        if (URL of t contains "douyin.com") then',
+      '          return execute t javascript jsCode',
+      '        end if',
+      '      end try',
+      '    end repeat',
+      '  end repeat',
+      '  error "No douyin.com tab is available for Apple Events execution"',
+      'end tell'
     ].join('\n');
 
     try {

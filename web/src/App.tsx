@@ -33,9 +33,9 @@ import {
 } from 'lucide-react';
 import type { ChangeEvent, ReactNode } from 'react';
 
-import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadRunCompare, loadRunDetail, loadRunEvents, loadRuntimeHealth, loadScanStatus, startScanJob, stopScanJob } from './api';
+import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadRunCompare, loadRunDetail, loadRunEvents, loadRuntimeHealth, loadScanConfig, loadScanStatus, startScanJob, stopScanJob, updateScanConfig } from './api';
 import { EventBars, StatusDonut, TrendChart } from './components/Charts';
-import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, RuntimeHealthStatus, RunCompareResult, ScanJobStatus, ScanRun, ScanRunDetail } from './types';
+import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, RuntimeHealthStatus, RunCompareResult, ScanConfig, ScanJobStatus, ScanRun, ScanRunDetail } from './types';
 
 const EVENT_LABELS: Record<EventType, string> = {
   new: '新增',
@@ -69,6 +69,13 @@ const PHASE_LABELS: Record<string, string> = {
   completed: '已完成',
   failed: '失败',
   interrupted: '已中断'
+};
+
+const RUNTIME_LABELS: Record<string, string> = {
+  'apple-events': '豆包浏览器',
+  cdp: 'CDP',
+  playwright: 'Playwright',
+  demo: 'Demo'
 };
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -177,6 +184,9 @@ function App() {
   const [cookieError, setCookieError] = useState('');
   const [cookieBusy, setCookieBusy] = useState(false);
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthStatus | null>(null);
+  const [scanConfig, setScanConfig] = useState<ScanConfig | null>(null);
+  const [scanConfigError, setScanConfigError] = useState('');
+  const [scanConfigBusy, setScanConfigBusy] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState('');
   const [runDetail, setRunDetail] = useState<ScanRunDetail | null>(null);
   const [runEvents, setRunEvents] = useState<Page<FollowerEvent> | null>(null);
@@ -285,22 +295,24 @@ function App() {
 
   useEffect(() => {
     if (isDemoMode) {
-      Promise.all([loadScanStatus(), loadRuntimeHealth()]).then(([status, health]) => {
+      Promise.all([loadScanStatus(), loadRuntimeHealth(), loadScanConfig()]).then(([status, health, config]) => {
         setScanStatus(status);
         setCookieAuth(status.cookieAuth);
         setRuntimeHealth(health);
+        setScanConfig(config);
       }).catch(() => {});
       return undefined;
     }
 
     let alive = true;
-    Promise.all([loadScanStatus(), loadCookieAuthStatus(), loadRuntimeHealth()])
-      .then(([status, authStatus, health]) => {
+    Promise.all([loadScanStatus(), loadCookieAuthStatus(), loadRuntimeHealth(), loadScanConfig()])
+      .then(([status, authStatus, health, config]) => {
         if (!alive) return;
         previousScanStateRef.current = status.status;
         setScanStatus(status);
         setCookieAuth(authStatus);
         setRuntimeHealth(health);
+        setScanConfig(config);
       })
       .catch((err) => {
         if (alive) setScanActionError(err instanceof Error ? err.message : String(err));
@@ -317,7 +329,11 @@ function App() {
       setRuntimeHealth((current) => current ? healthWithScanStatus(current, status) : current);
       setScanActionError('');
       if (wasActive && isFinished) {
-        Promise.all([refreshAfterScanRef.current(), loadRuntimeHealth().then(setRuntimeHealth)])
+        Promise.all([
+          refreshAfterScanRef.current(),
+          loadRuntimeHealth().then(setRuntimeHealth),
+          loadScanConfig().then(setScanConfig)
+        ])
           .catch((err) => setScanActionError(err instanceof Error ? err.message : String(err)));
       }
     }, () => {
@@ -340,11 +356,35 @@ function App() {
       previousScanStateRef.current = result.status.status;
       setScanStatus(result.status);
       setRuntimeHealth((current) => current ? healthWithScanStatus(current, result.status) : current);
-      loadRuntimeHealth().then(setRuntimeHealth).catch(() => {});
+      Promise.all([
+        loadRuntimeHealth().then(setRuntimeHealth),
+        loadScanConfig().then(setScanConfig)
+      ]).catch(() => {});
     } catch (err) {
       setScanActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setScanBusy(false);
+    }
+  };
+
+  const handleScanConfigChange = async (patch: Partial<Pick<ScanConfig, 'runtime' | 'mode' | 'cdpUrl'>>) => {
+    if (isDemoMode) return;
+    setScanConfigBusy(true);
+    setScanConfigError('');
+    try {
+      const result = await updateScanConfig(patch);
+      setScanConfig(result.config);
+      setScanStatus(result.status);
+      const [authStatus, health] = await Promise.all([
+        loadCookieAuthStatus(),
+        loadRuntimeHealth()
+      ]);
+      setCookieAuth(authStatus);
+      setRuntimeHealth(health);
+    } catch (err) {
+      setScanConfigError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScanConfigBusy(false);
     }
   };
 
@@ -487,6 +527,9 @@ function App() {
         <ScanControlPanel
           status={scanStatus}
           error={scanActionError}
+          config={scanConfig}
+          configError={scanConfigError}
+          configBusy={scanConfigBusy}
           cookieAuth={cookieAuth}
           runtimeHealth={runtimeHealth}
           cookieError={cookieError}
@@ -495,6 +538,7 @@ function App() {
           running={scanRunning}
           busy={scanBusy}
           onAction={handleScanAction}
+          onConfigChange={handleScanConfigChange}
           onCookieImport={handleCookieImport}
           onCookieClear={handleCookieClear}
         />
@@ -776,6 +820,9 @@ function SetupPanel({
 function ScanControlPanel({
   status,
   error,
+  config,
+  configError,
+  configBusy,
   cookieAuth,
   runtimeHealth,
   cookieError,
@@ -784,11 +831,15 @@ function ScanControlPanel({
   running,
   busy,
   onAction,
+  onConfigChange,
   onCookieImport,
   onCookieClear
 }: {
   status: ScanJobStatus | null;
   error: string;
+  config: ScanConfig | null;
+  configError: string;
+  configBusy: boolean;
   cookieAuth: CookieAuthStatus | null;
   runtimeHealth: RuntimeHealthStatus | null;
   cookieError: string;
@@ -797,14 +848,21 @@ function ScanControlPanel({
   running: boolean;
   busy: boolean;
   onAction: () => void;
+  onConfigChange: (patch: Partial<Pick<ScanConfig, 'runtime' | 'mode' | 'cdpUrl'>>) => void;
   onCookieImport: (file: File) => void;
   onCookieClear: () => void;
 }) {
   const cookieInputRef = useRef<HTMLInputElement>(null);
   const [now, setNow] = useState(Date.now());
+  const [cdpDraft, setCdpDraft] = useState(config?.cdpUrl || 'http://127.0.0.1:9222');
   const hasStatus = Boolean(status);
   const logs = status?.logLines.slice(-8) || [];
   const change = status?.changeSummary;
+  const activeRuntime = config?.runtime || status?.runtime || 'playwright';
+  const activeMode = config?.mode || status?.requestedMode || status?.mode || 'monitor';
+  const configDisabled = isDemo || running || configBusy || !config?.canEdit;
+  const modeOptions = config?.options?.modes || [];
+  const runtimeOptions = config?.options?.runtimes || [];
   const authChallenge = status?.authChallenge || null;
   const waitingForVerification = status?.phase === 'waiting_for_verification' && authChallenge?.status === 'waiting';
   const challengeTitle = authChallenge?.kind === 'login' ? '等待登录' : '等待验证码';
@@ -834,6 +892,10 @@ function ScanControlPanel({
     return () => window.clearInterval(timer);
   }, [waitingForVerification]);
 
+  useEffect(() => {
+    if (config?.cdpUrl) setCdpDraft(config.cdpUrl);
+  }, [config?.cdpUrl]);
+
   const handleCookieFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
@@ -846,7 +908,7 @@ function ScanControlPanel({
         <PanelHeader
           icon={RefreshCw}
           title="采集控制"
-          subtitle={isDemo ? '公开演示不连接本地浏览器' : '默认使用 monitor 自动决策 recent/full'}
+          subtitle={isDemo ? '公开演示不连接本地浏览器' : '可切换 Runtime 和 monitor/recent/full 模式'}
         />
         <button className={`button primary ${running ? 'danger' : ''}`} type="button" onClick={onAction} disabled={isDemo || busy}>
           {running ? <Square size={16} /> : <Play size={16} />}
@@ -858,6 +920,83 @@ function ScanControlPanel({
         <div className="scan-error">
           <AlertTriangle size={16} />
           <span>{error}</span>
+        </div>
+      )}
+
+      <div className="scan-config-card">
+        <div className="scan-config-row">
+          <div className="scan-config-label">
+            <span>采集 Runtime</span>
+            <strong>{config?.runtimeLabel || status?.runtimeLabel || RUNTIME_LABELS[activeRuntime] || activeRuntime}</strong>
+          </div>
+          <div className="segmented-buttons" role="group" aria-label="采集 Runtime">
+            {runtimeOptions.map((option) => (
+              <button
+                key={option.value}
+                className={`segmented-button ${activeRuntime === option.value ? 'selected' : ''}`}
+                type="button"
+                disabled={configDisabled}
+                title={option.detail}
+                onClick={() => onConfigChange({ runtime: option.value })}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="scan-config-row">
+          <div className="scan-config-label">
+            <span>扫描模式</span>
+            <strong>{MODE_LABELS[activeMode] || activeMode}</strong>
+          </div>
+          <div className="segmented-buttons" role="group" aria-label="扫描模式">
+            {modeOptions.map((option) => (
+              <button
+                key={option.value}
+                className={`segmented-button ${activeMode === option.value ? 'selected' : ''}`}
+                type="button"
+                disabled={configDisabled}
+                title={option.detail}
+                onClick={() => onConfigChange({ mode: option.value })}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {activeRuntime === 'cdp' && (
+          <div className="scan-config-row">
+            <div className="scan-config-label">
+              <span>CDP 地址</span>
+              <strong>loopback only</strong>
+            </div>
+            <div className="scan-config-cdp">
+              <input
+                type="url"
+                value={cdpDraft}
+                disabled={configDisabled}
+                onChange={(event) => setCdpDraft(event.currentTarget.value)}
+                placeholder="http://127.0.0.1:9222"
+              />
+              <button
+                className="button compact"
+                type="button"
+                disabled={configDisabled || cdpDraft === config?.cdpUrl}
+                onClick={() => onConfigChange({ runtime: 'cdp', cdpUrl: cdpDraft })}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {configError && (
+        <div className="scan-error">
+          <AlertTriangle size={16} />
+          <span>{configError}</span>
         </div>
       )}
 

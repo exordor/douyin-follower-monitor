@@ -242,6 +242,25 @@ try {
   assert.equal(authStatus.body.acceptedCount, 1);
   assert.equal(JSON.stringify(authStatus.body).includes('secret'), false);
 
+  const scanConfig = await requestJson(port, 'GET', '/api/scan/config');
+  assert.equal(scanConfig.statusCode, 200);
+  assert.equal(scanConfig.body.runtime, 'cdp');
+  assert.equal(scanConfig.body.mode, 'monitor');
+  assert.equal(scanConfig.body.cdpUrl, 'http://127.0.0.1:9222');
+
+  const updatedConfig = await requestJson(port, 'POST', '/api/scan/config', {
+    'x-douyin-dashboard-action': 'scan'
+  }, { mode: 'recent', runtime: 'cdp', cdpUrl: 'http://localhost:9222/' });
+  assert.equal(updatedConfig.statusCode, 200);
+  assert.equal(updatedConfig.body.config.mode, 'recent');
+  assert.equal(updatedConfig.body.config.runtime, 'cdp');
+  assert.equal(updatedConfig.body.config.cdpUrl, 'http://localhost:9222');
+
+  const invalidConfig = await requestJson(port, 'POST', '/api/scan/config', {
+    'x-douyin-dashboard-action': 'scan'
+  }, { runtime: 'shell' });
+  assert.equal(invalidConfig.statusCode, 400);
+
   const importForbidden = await requestJson(port, 'POST', '/api/auth/cookies/import', {
     origin: 'https://example.com',
     'x-douyin-dashboard-action': 'auth'
@@ -260,6 +279,11 @@ try {
     'x-douyin-dashboard-action': 'scan'
   });
   assert.equal(duplicate.statusCode, 409);
+
+  const lockedConfig = await requestJson(port, 'POST', '/api/scan/config', {
+    'x-douyin-dashboard-action': 'scan'
+  }, { mode: 'full' });
+  assert.equal(lockedConfig.statusCode, 409);
 
   const eventStatus = await ssePromise;
   assert.equal(['running', 'starting'].includes(eventStatus.status), true);
@@ -302,7 +326,7 @@ try {
     'cdp',
     '--api',
     '--mode',
-    'monitor'
+    'recent'
   ]);
   assert.deepEqual(children[0].args.slice(7, 10), [
     '--auth-wait-seconds',
