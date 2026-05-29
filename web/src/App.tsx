@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   CircleDot,
   Clock3,
+  Copy,
   Database,
   Download,
   ExternalLink,
@@ -32,9 +33,9 @@ import {
 } from 'lucide-react';
 import type { ChangeEvent, ReactNode } from 'react';
 
-import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadScanStatus, startScanJob, stopScanJob } from './api';
+import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadRuntimeHealth, loadScanStatus, startScanJob, stopScanJob } from './api';
 import { EventBars, StatusDonut, TrendChart } from './components/Charts';
-import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, ScanJobStatus, ScanRun } from './types';
+import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, RuntimeHealthStatus, ScanJobStatus, ScanRun } from './types';
 
 const EVENT_LABELS: Record<EventType, string> = {
   new: '新增',
@@ -98,6 +99,29 @@ function formatRemaining(deadlineAt: string | null | undefined, now: number) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function healthWithScanStatus(health: RuntimeHealthStatus, status: ScanJobStatus): RuntimeHealthStatus {
+  const isWaiting = status.phase === 'waiting_for_verification' && status.authChallenge?.status === 'waiting';
+  const checks = health.checks.map((item) => {
+    if (item.id !== 'verification') return item;
+    return {
+      ...item,
+      state: isWaiting ? 'fail' : item.state,
+      detail: isWaiting ? '请在采集浏览器中人工完成，完成后任务会继续。' : item.detail
+    };
+  });
+  if (!isWaiting) return { ...health, runtime: status.runtime || health.runtime, runtimeLabel: status.runtimeLabel || health.runtimeLabel, checks };
+  return {
+    ...health,
+    runtime: status.runtime || health.runtime,
+    runtimeLabel: status.runtimeLabel || health.runtimeLabel,
+    level: 'action',
+    headline: status.authChallenge?.kind === 'login' ? '等待人工登录' : '等待人工验证',
+    recommendation: '请在采集浏览器中完成登录或验证码。若频繁出现，建议改用 CDP 复用已登录浏览器会话。',
+    recommendedRuntime: 'cdp',
+    checks
+  };
+}
+
 function metricCards(data: OverviewData) {
   const { summary } = data;
   return [
@@ -152,6 +176,7 @@ function App() {
   const [cookieAuth, setCookieAuth] = useState<CookieAuthStatus | null>(null);
   const [cookieError, setCookieError] = useState('');
   const [cookieBusy, setCookieBusy] = useState(false);
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthStatus | null>(null);
   const previousScanStateRef = useRef('');
   const refreshAfterScanRef = useRef<() => Promise<void>>(async () => {});
 
@@ -223,20 +248,22 @@ function App() {
 
   useEffect(() => {
     if (isDemoMode) {
-      loadScanStatus().then((status) => {
+      Promise.all([loadScanStatus(), loadRuntimeHealth()]).then(([status, health]) => {
         setScanStatus(status);
         setCookieAuth(status.cookieAuth);
+        setRuntimeHealth(health);
       }).catch(() => {});
       return undefined;
     }
 
     let alive = true;
-    Promise.all([loadScanStatus(), loadCookieAuthStatus()])
-      .then(([status, authStatus]) => {
+    Promise.all([loadScanStatus(), loadCookieAuthStatus(), loadRuntimeHealth()])
+      .then(([status, authStatus, health]) => {
         if (!alive) return;
         previousScanStateRef.current = status.status;
         setScanStatus(status);
         setCookieAuth(authStatus);
+        setRuntimeHealth(health);
       })
       .catch((err) => {
         if (alive) setScanActionError(err instanceof Error ? err.message : String(err));
@@ -250,9 +277,11 @@ function App() {
       previousScanStateRef.current = status.status;
       setScanStatus(status);
       if (status.cookieAuth) setCookieAuth(status.cookieAuth);
+      setRuntimeHealth((current) => current ? healthWithScanStatus(current, status) : current);
       setScanActionError('');
       if (wasActive && isFinished) {
-        refreshAfterScanRef.current().catch((err) => setScanActionError(err instanceof Error ? err.message : String(err)));
+        Promise.all([refreshAfterScanRef.current(), loadRuntimeHealth().then(setRuntimeHealth)])
+          .catch((err) => setScanActionError(err instanceof Error ? err.message : String(err)));
       }
     }, () => {
       if (alive) setScanActionError('实时采集连接已断开，页面会继续显示最后一次状态。');
@@ -273,6 +302,8 @@ function App() {
       const result = running ? await stopScanJob() : await startScanJob();
       previousScanStateRef.current = result.status.status;
       setScanStatus(result.status);
+      setRuntimeHealth((current) => current ? healthWithScanStatus(current, result.status) : current);
+      loadRuntimeHealth().then(setRuntimeHealth).catch(() => {});
     } catch (err) {
       setScanActionError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -289,6 +320,7 @@ function App() {
       const status = await importCookieAuth(file.name, content);
       setCookieAuth(status);
       setScanStatus((current) => current ? { ...current, cookieAuth: status } : current);
+      await loadRuntimeHealth().then(setRuntimeHealth);
     } catch (err) {
       setCookieError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -304,6 +336,7 @@ function App() {
       const status = await clearCookieAuth();
       setCookieAuth(status);
       setScanStatus((current) => current ? { ...current, cookieAuth: status } : current);
+      await loadRuntimeHealth().then(setRuntimeHealth);
     } catch (err) {
       setCookieError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -394,6 +427,7 @@ function App() {
           status={scanStatus}
           error={scanActionError}
           cookieAuth={cookieAuth}
+          runtimeHealth={runtimeHealth}
           cookieError={cookieError}
           cookieBusy={cookieBusy}
           isDemo={isDemoMode}
@@ -556,6 +590,7 @@ function ScanControlPanel({
   status,
   error,
   cookieAuth,
+  runtimeHealth,
   cookieError,
   cookieBusy,
   isDemo,
@@ -568,6 +603,7 @@ function ScanControlPanel({
   status: ScanJobStatus | null;
   error: string;
   cookieAuth: CookieAuthStatus | null;
+  runtimeHealth: RuntimeHealthStatus | null;
   cookieError: string;
   cookieBusy: boolean;
   isDemo: boolean;
@@ -692,6 +728,8 @@ function ScanControlPanel({
         </div>
       </div>
 
+      <RuntimeHealthCard health={runtimeHealth} status={status} isDemo={isDemo} />
+
       {cookieError && (
         <div className="scan-error">
           <AlertTriangle size={16} />
@@ -710,6 +748,62 @@ function ScanControlPanel({
         {logs.length ? logs.map((line, index) => <code key={`${line}-${index}`}>{line}</code>) : <code>{isDemo ? 'Demo 模式不运行本地采集。' : '点击“启动采集”后这里会显示实时进度。'}</code>}
       </div>
     </section>
+  );
+}
+
+function RuntimeHealthCard({ health, status, isDemo }: { health: RuntimeHealthStatus | null; status: ScanJobStatus | null; isDemo: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const view = health && status ? healthWithScanStatus(health, status) : health;
+  if (!view) return null;
+  const icon = view.level === 'ok' ? <CheckCircle2 size={17} /> : view.level === 'action' ? <AlertTriangle size={17} /> : <CircleDot size={17} />;
+
+  const copyCommand = async () => {
+    if (!view.commandHint) return;
+    try {
+      await navigator.clipboard.writeText(view.commandHint);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className={`runtime-health-card ${view.level}`}>
+      <div className="runtime-health-top">
+        <div className="runtime-health-title">
+          <div className="runtime-health-icon">{icon}</div>
+          <div>
+            <span>Runtime 健康</span>
+            <strong>{view.headline}</strong>
+            <small>{view.recommendation}</small>
+          </div>
+        </div>
+        <div className="runtime-health-recommendation">
+          <span>当前</span>
+          <strong>{view.runtimeLabel || view.runtime}</strong>
+          <small>推荐 {view.recommendedRuntime.toUpperCase()}</small>
+        </div>
+      </div>
+
+      <div className="runtime-checks">
+        {view.checks.map((item) => (
+          <div className={`runtime-check ${item.state}`} key={item.id}>
+            <span>{item.label}</span>
+            <strong>{item.detail}</strong>
+          </div>
+        ))}
+      </div>
+
+      {view.commandHint && (
+        <div className="runtime-command">
+          <code>{view.commandHint}</code>
+          <button className="button compact" type="button" onClick={copyCommand} disabled={isDemo}>
+            <Copy size={15} />{copied ? '已复制' : '复制'}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

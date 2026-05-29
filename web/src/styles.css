@@ -401,6 +401,142 @@ a {
   gap: 8px;
 }
 
+.runtime-health-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.runtime-health-card.ok {
+  border-color: #c7eadf;
+  background: #f3fbf8;
+}
+
+.runtime-health-card.warning {
+  border-color: #f2d7a6;
+  background: #fffaf0;
+}
+
+.runtime-health-card.action {
+  border-color: #fecdd3;
+  background: #fff7f7;
+}
+
+.runtime-health-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.runtime-health-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.runtime-health-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.runtime-health-card.warning .runtime-health-icon {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.runtime-health-card.action .runtime-health-icon {
+  color: #be123c;
+  background: #ffe4e6;
+}
+
+.runtime-health-title span,
+.runtime-health-title small,
+.runtime-health-recommendation span,
+.runtime-health-recommendation small {
+  display: block;
+  color: #667282;
+  font-size: 12px;
+}
+
+.runtime-health-title strong,
+.runtime-health-recommendation strong {
+  display: block;
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+  color: #15181e;
+  font-size: 13px;
+}
+
+.runtime-health-recommendation {
+  flex: 0 0 180px;
+  min-width: 0;
+  text-align: right;
+}
+
+.runtime-checks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.runtime-check {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e4ebf2;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.runtime-check.pass { border-color: #b7ead8; }
+.runtime-check.warn { border-color: #f2d7a6; }
+.runtime-check.fail { border-color: #fecdd3; }
+.runtime-check.info { border-color: #dbe3ed; }
+
+.runtime-check span {
+  display: block;
+  color: #667282;
+  font-size: 12px;
+}
+
+.runtime-check strong {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  color: #15181e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.runtime-command {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 8px;
+  color: #d8fff8;
+  background: #101318;
+}
+
+.runtime-command code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -979,13 +1115,21 @@ td code,
   .metrics,
   .dashboard-grid,
   .scan-grid,
+  .runtime-checks,
   .tables {
     grid-template-columns: 1fr;
   }
 
-  .cookie-auth-card {
+  .cookie-auth-card,
+  .runtime-health-top,
+  .runtime-command {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .runtime-health-recommendation {
+    flex-basis: auto;
+    text-align: left;
   }
 
   .verification-card {

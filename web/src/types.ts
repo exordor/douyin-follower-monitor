@@ -172,3 +172,24 @@ export interface ScanJobStatus {
   changeSummary: ScanJobChangeSummary | null;
   partial: ScanJobPartial | null;
 }
+
+export type RuntimeHealthLevel = 'ok' | 'warning' | 'action';
+export type RuntimeHealthCheckState = 'pass' | 'warn' | 'fail' | 'info';
+
+export interface RuntimeHealthCheck {
+  id: string;
+  label: string;
+  state: RuntimeHealthCheckState;
+  detail: string;
+}
+
+export interface RuntimeHealthStatus {
+  runtime: string;
+  runtimeLabel: string;
+  level: RuntimeHealthLevel;
+  headline: string;
+  recommendation: string;
+  recommendedRuntime: 'cdp' | 'playwright' | 'apple-events';
+  checks: RuntimeHealthCheck[];
+  commandHint?: string;
+}

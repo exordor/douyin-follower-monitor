@@ -22,6 +22,7 @@ import {
   getDashboardSummary,
   getDashboardTimeline
 } from './dashboard-data.mjs';
+import { buildRuntimeHealth } from './dashboard-runtime-health.mjs';
 import { createScanJobManager } from './dashboard-scan-job.mjs';
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -282,6 +283,19 @@ async function handleApi(req, res, url, options, scanManager) {
   }
   if (url.pathname.startsWith('/api/auth/cookies')) {
     return handleAuthApi(req, res, url, options, scanManager);
+  }
+  if (url.pathname === '/api/runtime/health') {
+    if (req.method !== 'GET') {
+      sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req));
+      return true;
+    }
+    const scanStatus = await scanManager.status();
+    const cookieAuth = await getCookieAuthStatus({
+      cookieFile: options.cookieFile,
+      runtime: scanStatus.runtime || options.runtime || 'auto'
+    });
+    sendJson(res, 200, buildRuntimeHealth({ scanStatus, cookieAuth }), corsHeadersFor(req));
+    return true;
   }
 
   if (url.pathname === '/api/summary') {

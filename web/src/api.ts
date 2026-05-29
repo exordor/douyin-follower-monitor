@@ -1,5 +1,5 @@
 import mockData from '../demo/mock-data.json';
-import type { CookieAuthStatus, EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent, ScanJobStatus } from './types';
+import type { CookieAuthStatus, EventType, FollowerStatus, OverviewData, Page, Follower, FollowerEvent, RuntimeHealthStatus, ScanJobStatus } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const IS_DEMO = import.meta.env.MODE === 'demo';
@@ -166,6 +166,27 @@ export async function loadCookieAuthStatus(): Promise<CookieAuthStatus> {
     };
   }
   return fetchJson('/api/auth/cookies/status');
+}
+
+export async function loadRuntimeHealth(): Promise<RuntimeHealthStatus> {
+  if (IS_DEMO) {
+    return {
+      runtime: 'demo',
+      runtimeLabel: 'Demo data',
+      level: 'warning',
+      headline: '公开演示不连接本地浏览器',
+      recommendation: 'Demo 站只展示 mock 数据；本地运行时会显示 Playwright、CDP 或 Apple Events 的真实健康状态。',
+      recommendedRuntime: 'cdp',
+      checks: [
+        { id: 'runtime', label: '浏览器 Runtime', state: 'info', detail: 'Demo mode 不启动采集 runtime。' },
+        { id: 'cookie-auth', label: 'Cookie 登录态', state: 'info', detail: 'Demo mode 不读取本地 cookie。' },
+        { id: 'verification', label: '验证状态', state: 'info', detail: 'Demo mode 不连接抖音页面。' },
+        { id: 'privacy-boundary', label: '安全边界', state: 'pass', detail: '公开演示只包含 synthetic mock 数据。' }
+      ],
+      commandHint: 'DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run dashboard'
+    };
+  }
+  return fetchJson('/api/runtime/health');
 }
 
 export async function importCookieAuth(filename: string, content: string): Promise<CookieAuthStatus> {

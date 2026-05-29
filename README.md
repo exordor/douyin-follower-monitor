@@ -89,6 +89,16 @@ npm run monitor:doubao
 npm run dashboard:doubao
 ```
 
+## 稳定性最佳实践
+
+开源通用场景推荐按这个顺序选择 runtime：
+
+1. 首选 `cdp`：连接已登录的 Chrome/Edge/Chromium，复用真实浏览器会话、cookie 和扩展环境。
+2. 次选 `playwright`：使用持久 profile，并可导入 cookie-manager 无损 JSON。
+3. `apple-events`：适合 macOS 复用豆包浏览器，但不适合作为跨平台默认方案。
+
+Dashboard 的“Runtime 健康”卡片会根据当前 runtime、Cookie 登录态和验证码等待状态给出建议。Cookie 只能复用你已经拥有的登录态，不能保证免验证码；如果平台要求验证，请人工完成。项目不实现验证码识别、模拟拖动、代理池规避或第三方打码。
+
 ## Cookie 登录态
 
 如果你使用 [Local Cookie Manager](https://github.com/exordor/sunbeam-cookie-jar) 导出了抖音 cookie，可以把无损 JSON 用作平台无关登录态。项目只接受 `format: "local-cookie-manager-v1"`，默认只导入对当前目标站点生效的 cookie，例如 `.douyin.com` 和 `www.douyin.com`；`creator.douyin.com`、`live.douyin.com` 这类无关子域 cookie 会被跳过。不导入 redacted 文件、过期 cookie 或分区 cookie。
@@ -158,11 +168,12 @@ npm run dashboard:dev
 - `GET /api/scan/events`
 - `POST /api/scan/start`
 - `POST /api/scan/stop`
-
-`GET /api/scan/status` 会返回 `phase` 和 `authChallenge`。当 `phase=waiting_for_verification` 时，说明采集浏览器需要人工登录或验证码处理；这只是状态展示，不包含自动验证码处理能力。
+- `GET /api/runtime/health`
 - `GET /api/auth/cookies/status`
 - `POST /api/auth/cookies/import`
 - `DELETE /api/auth/cookies`
+
+`GET /api/scan/status` 会返回 `phase` 和 `authChallenge`。当 `phase=waiting_for_verification` 时，说明采集浏览器需要人工登录或验证码处理；这只是状态展示，不包含自动验证码处理能力。
 
 自定义路径：
 
