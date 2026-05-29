@@ -43,6 +43,36 @@ http://127.0.0.1:4573
 - Cookie 登录态导入：支持 cookie-manager 无损 JSON，让 Playwright/CDP 在采集前注入 `douyin.com` cookie。
 - JSON/CSV 双写导出：保留人工查看和脚本兼容能力。
 
+## Agent Skills
+
+本项目内置公开可用的 Agent Skill Pack：
+
+- Codex：`$douyin-monitor`、`$douyin-monitor-control`
+- Claude Code：`/douyin-monitor`、`/douyin-monitor-control`
+
+Repo 内使用无需安装。clone 仓库后，在项目目录打开 Codex 或 Claude Code 即可发现 `.agents/skills/` 和 `.claude/skills/`。
+
+全局安装：
+
+```bash
+npm run skills:install:user
+```
+
+卸载：
+
+```bash
+npm run skills:uninstall:user
+```
+
+贡献 skill 时修改 `agent-skills/douyin-monitor-pack/`，再同步生成平台目录：
+
+```bash
+npm run skills:sync
+npm run test:skills
+```
+
+`douyin-monitor` 默认只读；`douyin-monitor-control` 只允许固定 allowlist action，mutating action 没有 `--yes` 时只做 dry-run。详细说明见 [Agent Skills](docs/agent-skills.md)。
+
 ## 工作原理
 
 ![Scan workflow](docs/diagrams/scan-workflow.png)
@@ -253,6 +283,7 @@ npm run test:state
 npm run test:dashboard
 npm run privacy:check
 npm run test:debug-bundle
+npm run test:skills
 npm run dashboard:build
 npm run pages:build
 ```

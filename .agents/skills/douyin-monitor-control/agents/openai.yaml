@@ -1,0 +1,7 @@
+interface:
+  display_name: "Douyin Monitor Control"
+  short_description: "Run allowlisted monitor, dashboard, debug, and launchd control actions."
+  brand_color: "#14b8a6"
+  default_prompt: "Use douyin-monitor-control to run an allowlisted project action."
+policy:
+  allow_implicit_invocation: false

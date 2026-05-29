@@ -11,6 +11,9 @@ const ROOT_DIR = path.resolve(new URL('..', import.meta.url).pathname);
 const CONTENT_ROOTS = [
   'README.md',
   'docs',
+  'agent-skills',
+  '.agents',
+  '.claude',
   'web',
   '.github',
   'package.json',

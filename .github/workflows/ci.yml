@@ -46,5 +46,8 @@ jobs:
       - name: Test debug bundle
         run: npm run test:debug-bundle
 
+      - name: Test agent skills
+        run: npm run test:skills
+
       - name: Build demo pages
         run: npm run pages:build

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Douyin Monitor"
+  short_description: "Diagnose and troubleshoot Douyin Follower Monitor safely."
+  brand_color: "#14b8a6"
+  default_prompt: "Use douyin-monitor to diagnose or troubleshoot this project."
+policy:
+  allow_implicit_invocation: true
