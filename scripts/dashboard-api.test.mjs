@@ -23,11 +23,12 @@ import {
   getDashboardTimeline
 } from './dashboard-data.mjs';
 
-function follower(id, nickname) {
+function follower(id, nickname, relationshipStatus = 'unknown') {
   return {
     id,
     uid: id.replace(/\D/g, '') || id,
     nickname,
+    relationshipStatus,
     profileUrl: `https://www.douyin.com/user/${id}`
   };
 }
@@ -49,7 +50,7 @@ async function withFixture(fn) {
   const outDir = path.join(dir, 'data');
   const db = await openMonitorDatabase(dbPath);
   try {
-    const x = follower('sec-x', '用户 X');
+    const x = follower('sec-x', '用户 X', 'mutual');
     const y = follower('sec-y', '用户 Y');
     const z = follower('sec-z', '用户 Z');
 
@@ -76,6 +77,14 @@ async function withFixture(fn) {
         profileFollowerCount, enumerableCount, pagesFetched, reason
       ) VALUES ('run-c', 'full', 'monitor', ?, ?, 'completed', 3, 2, 2, 'profile-followers-decreased')
     `).run(new Date().toISOString(), new Date().toISOString());
+
+    applyScanToDatabase(db, options('run-d', 3), [{ ...y, nickname: '用户 Y 改名' }, z]);
+    db.prepare(`
+      INSERT INTO scan_runs (
+        runId, mode, requestedMode, startedAt, finishedAt, status,
+        profileFollowerCount, enumerableCount, pagesFetched, reason
+      ) VALUES ('run-d', 'full', 'monitor', ?, ?, 'completed', 3, 2, 2, 'confirmed-removal')
+    `).run(new Date(Date.now() + 1000).toISOString(), new Date(Date.now() + 1000).toISOString());
 
     await mkdir(outDir, { recursive: true });
     await writeFile(path.join(outDir, 'latest-change.json'), JSON.stringify({
@@ -105,16 +114,19 @@ await withFixture(async ({ dbPath, outDir }) => {
   assert.equal(summary.enumerableCount, 2);
   assert.equal(summary.hiddenOrUnavailableCount, 1);
   assert.equal(summary.statusCounts.active, 2);
-  assert.equal(summary.statusCounts.suspected_removed, 1);
+  assert.equal(summary.statusCounts.suspected_removed, 0);
+  assert.equal(summary.statusCounts.removed, 1);
   assert.equal(summary.lastChangeCounts.suspectedRemovedCount, 1);
 
   const timeline = await getDashboardTimeline({ dbPath, days: 7 });
-  assert.equal(timeline.length, 3);
+  assert.equal(timeline.length, 4);
   assert.equal(timeline.at(-1).hiddenOrUnavailableCount, 1);
 
   const followers = await getDashboardFollowers({ dbPath, status: 'active', q: '用户', limit: 10, offset: 0 });
   assert.equal(followers.total, 2);
   assert.equal(followers.rows.every((row) => row.status === 'active'), true);
+  const removedFollowers = await getDashboardFollowers({ dbPath, status: 'removed', limit: 10, offset: 0 });
+  assert.equal(removedFollowers.rows[0].relationshipStatus, 'mutual');
 
   const events = await getDashboardEvents({ dbPath, type: 'renamed', q: '改名', limit: 10, offset: 0 });
   assert.equal(events.total >= 1, true);
@@ -126,7 +138,7 @@ await withFixture(async ({ dbPath, outDir }) => {
 
   const runs = await getDashboardRuns({ dbPath, limit: 2 });
   assert.equal(runs.length, 2);
-  assert.equal(runs[0].runId, 'run-c');
+  assert.equal(runs[0].runId, 'run-d');
 
   const runDetail = await getDashboardRun({ dbPath, runId: 'run-b' });
   assert.equal(runDetail.runId, 'run-b');
@@ -136,6 +148,13 @@ await withFixture(async ({ dbPath, outDir }) => {
   const runEvents = await getDashboardRunEvents({ dbPath, runId: 'run-b', type: 'new', limit: 10, offset: 0 });
   assert.equal(runEvents.total, 1);
   assert.equal(runEvents.rows[0].runId, 'run-b');
+
+  const mutualEvents = await getDashboardEvents({ dbPath, type: 'mutual_unfollowed_you', limit: 10, offset: 0 });
+  assert.equal(mutualEvents.total, 1);
+  assert.equal(mutualEvents.rows[0].type, 'mutual_unfollowed_you');
+
+  const mutualRunDetail = await getDashboardRun({ dbPath, runId: 'run-d' });
+  assert.equal(mutualRunDetail.eventCounts.mutual_unfollowed_you, 1);
 
   const compared = await getDashboardCompare({ dbPath, from: 'run-a', to: 'run-c' });
   assert.equal(compared.fromRun.runId, 'run-a');

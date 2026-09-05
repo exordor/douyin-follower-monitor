@@ -35,13 +35,14 @@ import type { ChangeEvent, ReactNode } from 'react';
 
 import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadRunCompare, loadRunDetail, loadRunEvents, loadRuntimeHealth, loadScanConfig, loadScanStatus, startScanJob, stopScanJob, updateScanConfig } from './api';
 import { EventBars, StatusDonut, TrendChart } from './components/Charts';
-import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, RuntimeHealthStatus, RunCompareResult, ScanConfig, ScanJobStatus, ScanRun, ScanRunDetail } from './types';
+import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, RelationshipStatus, RuntimeHealthStatus, RunCompareResult, ScanConfig, ScanJobStatus, ScanRun, ScanRunDetail } from './types';
 
 const EVENT_LABELS: Record<EventType, string> = {
   new: '新增',
   seen: '出现',
   suspected_removed: '疑似取关',
   removed: '确认取关',
+  mutual_unfollowed_you: '互关后取关我',
   reappeared: '重新出现',
   renamed: '昵称变化'
 };
@@ -50,6 +51,12 @@ const STATUS_LABELS: Record<FollowerStatus, string> = {
   active: '活跃',
   suspected_removed: '疑似取关',
   removed: '确认取关'
+};
+
+const RELATIONSHIP_LABELS: Record<RelationshipStatus, string> = {
+  unknown: '未知',
+  mutual: '互关',
+  follower_only: '仅关注我'
 };
 
 const MODE_LABELS: Record<string, string> = {
@@ -152,6 +159,13 @@ function metricCards(data: OverviewData) {
       detail: '仅 full 扫描判断',
       icon: UserMinus,
       tone: 'amber'
+    },
+    {
+      label: '互关后取关我',
+      value: summary.lastChangeCounts.mutualUnfollowedYouCount,
+      detail: '两次完整缺失后确认',
+      icon: UserMinus,
+      tone: 'rose'
     },
     {
       label: '隐藏/不可用',
@@ -1266,8 +1280,13 @@ function FollowerStatusPill({ value }: { value: FollowerStatus }) {
   return <span className={`pill ${tone}`}>{STATUS_LABELS[value]}</span>;
 }
 
+function RelationshipPill({ value }: { value: RelationshipStatus }) {
+  const tone = value === 'mutual' ? 'rose' : value === 'follower_only' ? 'teal' : 'muted';
+  return <span className={`pill ${tone}`}>{RELATIONSHIP_LABELS[value]}</span>;
+}
+
 function EventTypePill({ value }: { value: EventType }) {
-  const tone = value === 'new' ? 'teal' : value === 'removed' ? 'rose' : value === 'suspected_removed' ? 'amber' : value === 'reappeared' ? 'green' : 'muted';
+  const tone = value === 'new' ? 'teal' : value === 'removed' || value === 'mutual_unfollowed_you' ? 'rose' : value === 'suspected_removed' ? 'amber' : value === 'reappeared' ? 'green' : 'muted';
   return <span className={`pill ${tone}`}>{EVENT_LABELS[value] || value}</span>;
 }
 
@@ -1313,6 +1332,7 @@ function FollowersTable({ followers }: { followers: Follower[] }) {
           <tr>
             <th>昵称</th>
             <th>状态</th>
+            <th>关系</th>
             <th>首次出现</th>
             <th>最近出现</th>
             <th>Full 缺失</th>
@@ -1329,6 +1349,7 @@ function FollowersTable({ followers }: { followers: Follower[] }) {
                 <span className="sub-id">{follower.uid || follower.id}</span>
               </td>
               <td><FollowerStatusPill value={follower.status} /></td>
+              <td><RelationshipPill value={follower.relationshipStatus || 'unknown'} /></td>
               <td>{formatDate(follower.firstSeenAt)}</td>
               <td>{formatDate(follower.lastSeenAt)}</td>
               <td>{formatNumber(follower.missingFullScans || 0)}</td>
@@ -1354,6 +1375,7 @@ function RunDetailPanel({ detail, events, error }: { detail: ScanRunDetail | nul
     ['新增', detail.eventCounts.new],
     ['疑似取关', detail.eventCounts.suspected_removed],
     ['确认取关', detail.eventCounts.removed],
+    ['互关后取关我', detail.eventCounts.mutual_unfollowed_you],
     ['重新出现', detail.eventCounts.reappeared],
     ['改名', detail.eventCounts.renamed]
   ];

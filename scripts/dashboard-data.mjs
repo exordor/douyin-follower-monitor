@@ -7,7 +7,7 @@ const ROOT_DIR = path.resolve(new URL('..', import.meta.url).pathname);
 const DEFAULT_DB = path.join(ROOT_DIR, 'data', 'followers.db');
 const DEFAULT_OUT_DIR = path.join(ROOT_DIR, 'data');
 
-const EVENT_TYPES = new Set(['new', 'seen', 'suspected_removed', 'removed', 'reappeared', 'renamed']);
+const EVENT_TYPES = new Set(['new', 'seen', 'suspected_removed', 'removed', 'mutual_unfollowed_you', 'reappeared', 'renamed']);
 const FOLLOWER_STATUSES = new Set(['active', 'suspected_removed', 'removed']);
 
 function clampLimit(value, fallback = 100, max = 5000) {
@@ -148,6 +148,7 @@ async function getDashboardSummary({ dbPath = DEFAULT_DB, outDir = DEFAULT_OUT_D
         newCount: latestChange?.newCount ?? latestChange?.addedCount ?? 0,
         suspectedRemovedCount: latestChange?.suspectedRemovedCount ?? 0,
         removedCount: latestChange?.removedCount ?? 0,
+        mutualUnfollowedYouCount: latestChange?.mutualUnfollowedYouCount ?? 0,
         renamedCount: latestChange?.renamedCount ?? 0,
         reappearedCount: latestChange?.reappearedCount ?? 0
       }
@@ -210,7 +211,8 @@ async function getDashboardFollowers({
     const total = db.prepare(`SELECT COUNT(*) AS count FROM followers ${whereSql}`).get(...params).count;
     const rows = db.prepare(`
       SELECT id, uid, nickname, profileUrl, firstSeenAt, lastSeenAt, lastFullSeenAt,
-             status, suspectedRemovedAt, removedAt, missingFullScans
+             status, suspectedRemovedAt, removedAt, missingFullScans,
+             relationshipStatus, relationshipObservedAt
       FROM followers
       ${whereSql}
       ORDER BY
@@ -334,6 +336,7 @@ async function getDashboardRun({ dbPath = DEFAULT_DB, runId = '' } = {}) {
         renamed: counts.renamed || 0,
         suspected_removed: counts.suspected_removed || 0,
         removed: counts.removed || 0,
+        mutual_unfollowed_you: counts.mutual_unfollowed_you || 0,
         reappeared: counts.reappeared || 0
       }
     };

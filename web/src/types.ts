@@ -1,5 +1,6 @@
 export type FollowerStatus = 'active' | 'suspected_removed' | 'removed';
-export type EventType = 'new' | 'seen' | 'suspected_removed' | 'removed' | 'reappeared' | 'renamed';
+export type RelationshipStatus = 'unknown' | 'mutual' | 'follower_only';
+export type EventType = 'new' | 'seen' | 'suspected_removed' | 'removed' | 'mutual_unfollowed_you' | 'reappeared' | 'renamed';
 export type ScanStatus = 'completed' | 'interrupted' | 'failed' | 'running';
 
 export interface ScanRun {
@@ -22,6 +23,7 @@ export interface ScanRunDetail extends ScanRun {
     renamed: number;
     suspected_removed: number;
     removed: number;
+    mutual_unfollowed_you: number;
     reappeared: number;
   };
 }
@@ -54,6 +56,8 @@ export interface Follower {
   suspectedRemovedAt: string | null;
   removedAt: string | null;
   missingFullScans?: number;
+  relationshipStatus: RelationshipStatus;
+  relationshipObservedAt: string | null;
 }
 
 export interface FollowerEvent {
@@ -99,6 +103,7 @@ export interface DashboardSummary {
     newCount: number;
     suspectedRemovedCount: number;
     removedCount: number;
+    mutualUnfollowedYouCount: number;
     renamedCount: number;
     reappearedCount: number;
   };
