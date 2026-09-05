@@ -93,6 +93,66 @@ try {
   assert.equal(added.length, 1);
   assert.equal(added[0].name, 'sessionid');
   assert.equal(runtime.cookieAuthSummary.acceptedCount, 1);
+
+  // A CDP endpoint may reject browser-level Storage commands while supporting
+  // page-level Network commands. Keep the same context and surface real errors.
+  for (const failure of ['', 'Browser context management is not supported.', 'Target closed']) {
+    const cdp = await createBrowserRuntime({ runtime: 'cdp', cdpUrl: 'http://127.0.0.1:9222', cookieFile }, emptyEnv);
+    const calls = [];
+    const page = {};
+    cdp.browser = {};
+    cdp.context = {
+      pages: () => [page],
+      addCookies: async () => { if (failure) throw new Error(failure); },
+      newCDPSession: async target => {
+        assert.equal(target, page);
+        return {
+          send: async (method, params) => calls.push({ method, params }),
+          detach: async () => calls.push('detach')
+        };
+      }
+    };
+    if (failure === 'Target closed') {
+      await assert.rejects(cdp.applyCookieAuth(), /Target closed/);
+      assert.equal(cdp.cookiesApplied, false);
+      assert.deepEqual(calls, []);
+    } else {
+      await cdp.applyCookieAuth();
+      assert.equal(cdp.cookiesApplied, true);
+      assert.equal(cdp.cookieAuthSummary.acceptedCount, 1);
+      if (failure) {
+        assert.equal(calls[0].method, 'Network.setCookies');
+        assert.equal(calls[0].params.cookies[0].name, 'sessionid');
+        assert.equal(calls[0].params.cookies[0].httpOnly, true);
+        assert.equal(calls[1], 'detach');
+      } else assert.deepEqual(calls, []);
+      const count = calls.length;
+      await cdp.applyCookieAuth();
+      assert.equal(calls.length, count);
+    }
+  }
+
+  const failedCdp = await createBrowserRuntime({ runtime: 'cdp', cdpUrl: 'http://127.0.0.1:9222', cookieFile }, emptyEnv);
+  let detached = false;
+  let created = false;
+  const fallbackPage = {};
+  failedCdp.browser = {};
+  failedCdp.context = {
+    addCookies: async () => { throw new Error('Browser context management is not supported.'); },
+    pages: () => [],
+    newPage: async () => { created = true; return fallbackPage; },
+    newCDPSession: async page => {
+      assert.equal(page, fallbackPage);
+      return {
+        send: async () => { throw new Error('Network cookie write failed'); },
+        detach: async () => { detached = true; }
+      };
+    }
+  };
+  await assert.rejects(failedCdp.applyCookieAuth(), /Network cookie write failed/);
+  assert.equal(failedCdp.cookiesApplied, false);
+  assert.equal(detached, true);
+  assert.equal(created, true);
 } finally {
   await rm(dir, { recursive: true, force: true });
 }

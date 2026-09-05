@@ -195,7 +195,24 @@ class CdpRuntime {
   async applyCookieAuth() {
     if (this.cookiesApplied) return;
     await this.ensureConnection();
-    this.cookieAuthSummary = await applyCookieAuthToContext(this.context, this.cookieFile);
+    this.cookieAuthSummary = await applyCookieAuthToContext({
+      addCookies: async cookies => {
+        try {
+          await this.context.addCookies(cookies);
+        } catch (error) {
+          if (!String(error.message).includes('Browser context management is not supported')) throw error;
+          // Some attached browsers reject browser-level Storage.setCookies.
+          // Use the existing persistent context, never an incognito replacement.
+          const page = this.context.pages()[0] || await this.context.newPage();
+          const session = await this.context.newCDPSession(page);
+          try {
+            await session.send('Network.setCookies', { cookies });
+          } finally {
+            await session.detach().catch(() => {});
+          }
+        }
+      }
+    }, this.cookieFile);
     this.cookiesApplied = true;
   }
 
