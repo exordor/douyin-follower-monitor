@@ -8,6 +8,7 @@ import readline from 'node:readline/promises';
 
 import { createBrowserRuntime, resolveBrowserRuntimeConfig } from './browser-runtime.mjs';
 import { classifyCollectorError, errorSuggestion, publicErrorMessage } from './collector-errors.mjs';
+import { normalizeRelationshipStatus, relationshipFromApiUser } from './follower-relationship.mjs';
 import { buildNotificationPayload, parseNotifyConfig, sendNotification } from './notify.mjs';
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -729,6 +730,7 @@ function apiFollowerToFollower(user) {
     uid,
     nickname,
     douyinId: '',
+    relationshipStatus: relationshipFromApiUser(user),
     profileUrl: id ? `https://www.douyin.com/user/${encodeURIComponent(id)}` : '',
     rawText: [nickname, desc].filter(Boolean)
   };
@@ -1019,7 +1021,9 @@ async function openMonitorDatabase(dbPath) {
       status TEXT NOT NULL DEFAULT 'active',
       suspectedRemovedAt TEXT,
       removedAt TEXT,
-      missingFullScans INTEGER NOT NULL DEFAULT 0
+      missingFullScans INTEGER NOT NULL DEFAULT 0,
+      relationshipStatus TEXT NOT NULL DEFAULT 'unknown',
+      relationshipObservedAt TEXT
     );
 
     CREATE TABLE IF NOT EXISTS scan_runs (
@@ -1048,10 +1052,17 @@ async function openMonitorDatabase(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_scan_runs_mode_status ON scan_runs(mode, status, startedAt);
     CREATE INDEX IF NOT EXISTS idx_follower_events_follower ON follower_events(followerId, createdAt);
   `);
+  const followerColumns = new Set(db.prepare('PRAGMA table_info(followers)').all().map((row) => row.name));
+  if (!followerColumns.has('relationshipStatus')) {
+    db.exec("ALTER TABLE followers ADD COLUMN relationshipStatus TEXT NOT NULL DEFAULT 'unknown'");
+  }
+  if (!followerColumns.has('relationshipObservedAt')) {
+    db.exec('ALTER TABLE followers ADD COLUMN relationshipObservedAt TEXT');
+  }
   db.prepare(`
     INSERT INTO meta (key, value)
-    VALUES ('schema_version', '1')
-    ON CONFLICT(key) DO NOTHING
+    VALUES ('schema_version', '2')
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).run();
   return db;
 }
@@ -1077,6 +1088,8 @@ function normalizeDbFollower(row) {
     status: row.status || 'active',
     suspectedRemovedAt: row.suspectedRemovedAt || null,
     removedAt: row.removedAt || null,
+    relationshipStatus: normalizeRelationshipStatus(row.relationshipStatus),
+    relationshipObservedAt: row.relationshipObservedAt || null,
     rawText: [row.nickname || row.id].filter(Boolean)
   };
 }
@@ -1087,7 +1100,8 @@ function getActiveFollowerIds(db) {
 
 function getExportFollowersFromDb(db) {
   return db.prepare(`
-    SELECT id, uid, nickname, profileUrl, firstSeenAt, lastSeenAt, lastFullSeenAt, status, suspectedRemovedAt, removedAt
+    SELECT id, uid, nickname, profileUrl, firstSeenAt, lastSeenAt, lastFullSeenAt, status,
+           suspectedRemovedAt, removedAt, relationshipStatus, relationshipObservedAt
     FROM followers
     WHERE status = 'active'
     ORDER BY lastSeenAt DESC, firstSeenAt DESC
@@ -1128,13 +1142,15 @@ async function seedDatabaseFromLatestSnapshot(db, options) {
   const insertFollower = db.prepare(`
     INSERT INTO followers (
       id, uid, nickname, profileUrl, firstSeenAt, lastSeenAt, lastFullSeenAt,
-      status, suspectedRemovedAt, removedAt, missingFullScans
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, NULL, 0)
+      status, suspectedRemovedAt, removedAt, missingFullScans,
+      relationshipStatus, relationshipObservedAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, NULL, 0, ?, ?)
   `);
 
   db.exec('BEGIN IMMEDIATE');
   try {
     for (const follower of dedupeFollowers(latest.followers).filter((item) => item.id)) {
+      const relationshipStatus = normalizeRelationshipStatus(follower.relationshipStatus);
       insertFollower.run(
         follower.id,
         follower.uid || '',
@@ -1142,7 +1158,9 @@ async function seedDatabaseFromLatestSnapshot(db, options) {
         follower.profileUrl || `https://www.douyin.com/user/${encodeURIComponent(follower.id)}`,
         follower.firstSeenAt || collectedAt,
         follower.lastSeenAt || collectedAt,
-        treatAsFullBaseline ? (follower.lastFullSeenAt || collectedAt) : null
+        treatAsFullBaseline ? (follower.lastFullSeenAt || collectedAt) : null,
+        relationshipStatus,
+        relationshipStatus === 'unknown' ? null : (follower.relationshipObservedAt || collectedAt)
       );
     }
 
@@ -1269,6 +1287,7 @@ function applyScanToDatabase(db, options, scanFollowers) {
     new: [],
     suspectedRemoved: [],
     removed: [],
+    mutualUnfollowedYou: [],
     renamed: [],
     reappeared: [],
     seenCount: followers.length
@@ -1279,14 +1298,17 @@ function applyScanToDatabase(db, options, scanFollowers) {
     const insertFollower = db.prepare(`
       INSERT INTO followers (
         id, uid, nickname, profileUrl, firstSeenAt, lastSeenAt, lastFullSeenAt,
-        status, suspectedRemovedAt, removedAt, missingFullScans
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, NULL, 0)
+        status, suspectedRemovedAt, removedAt, missingFullScans,
+        relationshipStatus, relationshipObservedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, NULL, 0, ?, ?)
     `);
     const updateFollower = db.prepare(`
       UPDATE followers
       SET uid = ?, nickname = ?, profileUrl = ?, lastSeenAt = ?,
           lastFullSeenAt = CASE WHEN ? THEN ? ELSE lastFullSeenAt END,
-          status = 'active', suspectedRemovedAt = NULL, removedAt = NULL, missingFullScans = 0
+          status = 'active', suspectedRemovedAt = NULL, removedAt = NULL, missingFullScans = 0,
+          relationshipStatus = CASE WHEN ? != 'unknown' THEN ? ELSE relationshipStatus END,
+          relationshipObservedAt = CASE WHEN ? != 'unknown' THEN ? ELSE relationshipObservedAt END
       WHERE id = ?
     `);
     const markSuspected = db.prepare(`
@@ -1308,9 +1330,20 @@ function applyScanToDatabase(db, options, scanFollowers) {
       const existing = existingById.get(follower.id);
       const nickname = follower.nickname || follower.id;
       const profileUrl = follower.profileUrl || `https://www.douyin.com/user/${encodeURIComponent(follower.id)}`;
+      const relationshipStatus = normalizeRelationshipStatus(follower.relationshipStatus);
 
       if (!existing) {
-        insertFollower.run(follower.id, follower.uid || '', nickname, profileUrl, now, now, isCompleteFull ? now : null);
+        insertFollower.run(
+          follower.id,
+          follower.uid || '',
+          nickname,
+          profileUrl,
+          now,
+          now,
+          isCompleteFull ? now : null,
+          relationshipStatus,
+          relationshipStatus === 'unknown' ? null : now
+        );
         insertFollowerEvent(db, {
           followerId: follower.id,
           type: 'new',
@@ -1351,7 +1384,19 @@ function applyScanToDatabase(db, options, scanFollowers) {
         });
       }
 
-      updateFollower.run(follower.uid || existing.uid || '', nickname, profileUrl, now, isCompleteFull ? 1 : 0, now, follower.id);
+      updateFollower.run(
+        follower.uid || existing.uid || '',
+        nickname,
+        profileUrl,
+        now,
+        isCompleteFull ? 1 : 0,
+        now,
+        relationshipStatus,
+        relationshipStatus,
+        relationshipStatus,
+        now,
+        follower.id
+      );
     }
 
     if (isCompleteFull) {
@@ -1380,6 +1425,16 @@ function applyScanToDatabase(db, options, scanFollowers) {
             createdAt: now,
             payload: { missingFullScans }
           });
+          if (row.relationshipStatus === 'mutual') {
+            change.mutualUnfollowedYou.push(follower);
+            insertFollowerEvent(db, {
+              followerId: row.id,
+              type: 'mutual_unfollowed_you',
+              runId,
+              createdAt: now,
+              payload: { missingFullScans, relationshipStatus: 'mutual' }
+            });
+          }
         } else if (row.status === 'suspected_removed') {
           markSuspected.run(row.suspectedRemovedAt || now, missingFullScans, row.id);
         }
@@ -1404,6 +1459,7 @@ function applyScanToDatabase(db, options, scanFollowers) {
       addedCount: change.new.length,
       suspectedRemovedCount: change.suspectedRemoved.length,
       removedCount: change.removed.length,
+      mutualUnfollowedYouCount: change.mutualUnfollowedYou.length,
       renamedCount: change.renamed.length,
       reappearedCount: change.reappeared.length,
       hiddenOrUnavailableCount
@@ -1514,6 +1570,7 @@ async function persistCollectorError(options, error) {
     addedCount: 0,
     suspectedRemovedCount: 0,
     removedCount: 0,
+    mutualUnfollowedYouCount: 0,
     renamedCount: 0,
     reappearedCount: 0,
     hiddenOrUnavailableCount: null
@@ -1589,6 +1646,7 @@ async function persistResult(options, followers) {
       addedCount: options.monitorChange.addedCount,
       suspectedRemovedCount: options.monitorChange.suspectedRemovedCount,
       removedCount: options.monitorChange.removedCount,
+      mutualUnfollowedYouCount: options.monitorChange.mutualUnfollowedYouCount,
       renamedCount: options.monitorChange.renamedCount,
       reappearedCount: options.monitorChange.reappearedCount,
       hiddenOrUnavailableCount: options.monitorChange.hiddenOrUnavailableCount,
@@ -1597,6 +1655,7 @@ async function persistResult(options, followers) {
       new: options.monitorChange.new,
       suspectedRemoved: options.monitorChange.suspectedRemoved,
       removed: options.monitorChange.removed,
+      mutualUnfollowedYou: options.monitorChange.mutualUnfollowedYou,
       renamed: options.monitorChange.renamed,
       reappeared: options.monitorChange.reappeared
     };
@@ -1622,6 +1681,7 @@ async function persistResult(options, followers) {
       newCount: diff.added.length,
       suspectedRemovedCount: 0,
       removedCount: diff.removed.length,
+      mutualUnfollowedYouCount: 0,
       renamedCount: diff.renamed.length,
       reappearedCount: 0,
       hiddenOrUnavailableCount: Math.max(0, (options.profileStats?.followers || 0) - followers.length),

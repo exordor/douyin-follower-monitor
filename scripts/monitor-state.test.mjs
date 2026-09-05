@@ -13,12 +13,13 @@ import {
   openMonitorDatabase
 } from './collect-followers.mjs';
 
-function follower(id, nickname) {
+function follower(id, nickname, relationshipStatus = 'unknown') {
   return {
     id,
     uid: id.replace(/\D/g, '') || id,
     nickname,
     douyinId: '',
+    relationshipStatus,
     profileUrl: `https://www.douyin.com/user/${id}`,
     rawText: [nickname]
   };
@@ -48,7 +49,10 @@ async function withDb(fn) {
 }
 
 await withDb(async (db) => {
-  assert.equal(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get().value, '1');
+  assert.equal(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get().value, '2');
+  const columns = db.prepare('PRAGMA table_info(followers)').all().map((row) => row.name);
+  assert.equal(columns.includes('relationshipStatus'), true);
+  assert.equal(columns.includes('relationshipObservedAt'), true);
 
   const x = follower('sec-x', '用户 X');
   const y = follower('sec-y', '用户 Y');
@@ -76,6 +80,54 @@ await withDb(async (db) => {
   result = applyScanToDatabase(db, baseOptions({ runId: 'run-d' }), [x, y]);
   assert.equal(result.change.reappearedCount, 1);
   assert.equal(db.prepare("SELECT status FROM followers WHERE id = 'sec-x'").get().status, 'active');
+});
+
+await withDb(async (db) => {
+  applyScanToDatabase(db, baseOptions({ runId: 'relation-a' }), [
+    follower('sec-mutual', '用户 M', 'mutual'),
+    follower('sec-unknown', '用户 U')
+  ]);
+
+  const mutual = db.prepare("SELECT relationshipStatus, relationshipObservedAt FROM followers WHERE id = 'sec-mutual'").get();
+  assert.equal(mutual.relationshipStatus, 'mutual');
+  assert.ok(mutual.relationshipObservedAt);
+  assert.equal(db.prepare("SELECT relationshipStatus FROM followers WHERE id = 'sec-unknown'").get().relationshipStatus, 'unknown');
+
+  applyScanToDatabase(db, baseOptions({ runId: 'relation-b' }), [
+    follower('sec-mutual', '用户 M', 'unknown'),
+    follower('sec-unknown', '用户 U', 'follower_only')
+  ]);
+
+  assert.equal(db.prepare("SELECT relationshipStatus FROM followers WHERE id = 'sec-mutual'").get().relationshipStatus, 'mutual');
+  assert.equal(db.prepare("SELECT relationshipStatus FROM followers WHERE id = 'sec-unknown'").get().relationshipStatus, 'follower_only');
+});
+
+await withDb(async (db) => {
+  const mutual = follower('sec-mutual-remove', '用户 MR', 'mutual');
+  const followerOnly = follower('sec-follower-only-remove', '用户 FR', 'follower_only');
+  const stays = follower('sec-stays', '用户 S', 'unknown');
+
+  applyScanToDatabase(db, baseOptions({ runId: 'mutual-baseline', profileStats: { followers: 3 } }), [mutual, followerOnly, stays]);
+
+  let result = applyScanToDatabase(db, baseOptions({
+    runId: 'mutual-incomplete',
+    profileStats: { followers: 1 },
+    scanComplete: false
+  }), [stays]);
+  assert.equal(result.change.suspectedRemovedCount, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM follower_events WHERE type = 'mutual_unfollowed_you'").get().count, 0);
+
+  result = applyScanToDatabase(db, baseOptions({ runId: 'mutual-first-miss', profileStats: { followers: 1 } }), [stays]);
+  assert.equal(result.change.suspectedRemovedCount, 2);
+  assert.equal(result.change.mutualUnfollowedYouCount, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM follower_events WHERE type = 'mutual_unfollowed_you'").get().count, 0);
+
+  result = applyScanToDatabase(db, baseOptions({ runId: 'mutual-confirmed', profileStats: { followers: 1 } }), [stays]);
+  assert.equal(result.change.removedCount, 2);
+  assert.equal(result.change.mutualUnfollowedYouCount, 1);
+  const mutualEvents = db.prepare("SELECT followerId, type FROM follower_events WHERE type = 'mutual_unfollowed_you'").all()
+    .map((row) => ({ followerId: row.followerId, type: row.type }));
+  assert.deepEqual(mutualEvents, [{ followerId: 'sec-mutual-remove', type: 'mutual_unfollowed_you' }]);
 });
 
 await withDb(async (db) => {
