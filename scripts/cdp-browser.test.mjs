@@ -34,6 +34,7 @@ const opts = {
     launches++;
     assert.equal(executable, process.execPath);
     assert.ok(args.includes('--user-data-dir=/tmp/douyin-test-profile'));
+    assert.ok(args.includes('--profile-directory=Default'), 'restart must not select another last-used Chrome profile');
     assert.ok(args.includes('--remote-debugging-address=127.0.0.1'));
     assert.equal(options.shell, false);
     setTimeout(() => server.listen(Number(new URL(url).port), '127.0.0.1'), 30);

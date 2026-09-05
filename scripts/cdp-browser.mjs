@@ -62,6 +62,7 @@ async function launch(url, options) {
     `--remote-debugging-port=${url.port || 80}`,
     '--remote-debugging-address=127.0.0.1',
     `--user-data-dir=${profileDir}`,
+    '--profile-directory=Default',
     '--no-first-run', '--no-default-browser-check', 'https://www.douyin.com/user/self'
   ], { detached: true, stdio: 'ignore', shell: false });
   let failure = '';

@@ -161,6 +161,12 @@ class PlaywrightRuntime {
   }
 }
 
+export function requirePersistentCdpContext(browser) {
+  const context = browser.contexts()[0];
+  if (!context) throw new Error('CDP 未提供持久浏览器会话；为避免切换登录环境，已停止连接。请检查专用浏览器配置。');
+  return context;
+}
+
 class CdpRuntime {
   constructor(config) {
     this.name = 'cdp';
@@ -183,7 +189,7 @@ class CdpRuntime {
     }
     const { chromium } = await import('playwright');
     this.browser = await chromium.connectOverCDP(this.cdpUrl, { noDefaults: true });
-    this.context = this.browser.contexts()[0] || await this.browser.newContext();
+    this.context = requirePersistentCdpContext(this.browser);
   }
 
   async applyCookieAuth() {

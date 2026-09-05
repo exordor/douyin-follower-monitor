@@ -6,6 +6,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { createBrowserRuntime, resolveBrowserRuntimeConfig } from './browser-runtime.mjs';
+import * as runtimeModule from './browser-runtime.mjs';
+
+assert.equal(typeof runtimeModule.requirePersistentCdpContext, 'function');
+assert.throws(() => runtimeModule.requirePersistentCdpContext({ contexts: () => [] }), /持久/);
+const persistentContext = {};
+assert.equal(runtimeModule.requirePersistentCdpContext({ contexts: () => [persistentContext] }), persistentContext);
 
 const emptyEnv = {};
 
