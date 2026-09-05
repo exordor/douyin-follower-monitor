@@ -130,7 +130,7 @@ a {
 }
 
 .main {
-  width: min(100%, 1280px);
+  width: 100%;
   min-width: 0;
   padding: 28px 30px 42px;
 }
@@ -1081,7 +1081,6 @@ a {
 .connection-help { margin-bottom: 20px; }
 .connection-help > summary { cursor: pointer; padding: 16px; font-weight: 600; }
 .scan-global-status { border-left: 4px solid #c8375e; }
-.main { max-width: 1600px; }
 button:focus-visible, a:focus-visible, summary:focus-visible, select:focus-visible, input:focus-visible {
   outline: 3px solid #c8375e;
   outline-offset: 3px;

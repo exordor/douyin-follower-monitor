@@ -174,6 +174,19 @@ try {
   await page.getByRole('button', { name: /对比/ }).click();
   await expectText(page, 'Added');
 
+  for (const width of [1920, 2560]) {
+    await page.setViewportSize({ width, height: 1080 });
+    for (const name of ['概览', '关系事件', '粉丝列表', '采集设置']) {
+      await page.getByRole('link', { name, exact: true }).click();
+      const layout = await page.locator('.main').evaluate(main => ({
+        right: main.getBoundingClientRect().right,
+        viewport: document.documentElement.clientWidth,
+        overflow: document.body.scrollWidth > window.innerWidth + 2
+      }));
+      assert.ok(Math.abs(layout.viewport - layout.right) <= 2, `${name} must fill remaining browser width at ${width}px`);
+      assert.equal(layout.overflow, false);
+    }
+  }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: '采集设置', exact: true }).waitFor();
