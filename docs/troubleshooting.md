@@ -47,7 +47,7 @@
 
 1. 确认导入文件来自 Local Cookie Manager 的无损 JSON，格式为 `local-cookie-manager-v1`。
 2. 确认文件只来自你自己的登录浏览器，不要混用其他账号或设备的导出。
-3. 使用新的 Playwright profile 或关闭当前采集浏览器后重新启动，让 cookie 在首次导航前注入。
+3. 保持原来的持久 Profile。CDP 的“打开采集浏览器”和采集入口会载入项目 Cookie 并重新导航目标页；不要通过反复新建 Profile 排查登录问题。
 4. 如页面仍要求验证，请按页面提示人工完成；cookie 只能复用登录态，不能绕过平台验证。
 5. 在 dashboard 的 Cookie 状态或 Runtime 健康信息里查看导入数量摘要，不要通过打印 cookie 内容排查。
 
@@ -69,12 +69,13 @@ Chrome/Edge/Chromium 可能没有带 remote debugging 参数启动；端口不�
 
 ### 处理步骤
 
-1. 使用独立 profile 启动浏览器，并明确 remote debugging 端口：
+1. 优先在电脑端设置页点击“打开采集浏览器”；本机 CDP 未启动时，项目会自动打开固定配置的专用 Chrome。需要手动启动时，保持同一目录和端口：
 
    ```bash
    /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
      --remote-debugging-port=9222 \
-     --user-data-dir=/tmp/douyin-cdp-profile
+     --user-data-dir="$HOME/BrowserProfiles/douyin-follower" \
+     --profile-directory=Default
    ```
 
 2. 打开抖音页面并确认该浏览器里已经完成登录。
@@ -84,7 +85,7 @@ Chrome/Edge/Chromium 可能没有带 remote debugging 参数启动；端口不�
    DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor
    ```
 
-4. 如果仍失败，换一个端口和新的 `--user-data-dir`，并确认没有旧浏览器进程占用。
+4. 如果仍失败，检查端口是否被其他服务占用、专用目录是否正在被另一进程使用。先正常退出对应专用浏览器再重试；不要自动删除锁或新建空白 Profile。若确需换端口，同步更新 CDP 地址，仍保留原 Profile。
 
 ### 不建议做什么
 

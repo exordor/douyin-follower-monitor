@@ -48,6 +48,26 @@ http://127.0.0.1:4573
 - Cookie 登录态导入：支持 cookie-manager 无损 JSON，让 Playwright/CDP 在采集前注入 `douyin.com` cookie。
 - JSON/CSV 双写导出：保留人工查看和脚本兼容能力。
 
+## UI 与 Figma 设计
+
+[查看完整设计文档与 9 张预览图](docs/design/README.md) · [Figma 桌面稿](https://www.figma.com/design/1jeiVJex7CrRUSUNWYJCIa?node-id=4-3341) · [Figma 手机稿](https://www.figma.com/design/1jeiVJex7CrRUSUNWYJCIa?node-id=9-3652)
+
+桌面采用四页导航，内容区随窗口铺满；手机采用底部导航、卡片列表和事件详情弹层。Figma 文件是可编辑静态稿，访问取决于文件共享权限；仓库中的 PNG 可直接查看，不需要 Figma 账号。
+
+**以下为设计稿，账号和数字均为虚构示例，不是实时采集结果。**
+
+![桌面关系事件设计稿](docs/design/assets/desktop-events.png)
+
+<p>
+  <img src="docs/design/assets/mobile-overview.png" width="190" alt="手机概览设计稿" />
+  <img src="docs/design/assets/mobile-events.png" width="190" alt="手机关系事件设计稿" />
+  <img src="docs/design/assets/mobile-event-detail.png" width="190" alt="手机事件详情设计稿" />
+</p>
+
+手机布局（宽度不超过 600px）已实现底部四栏导航、双列指标、事件/粉丝/采集记录卡片与事件详情弹层。详情只使用数据库记录，不生成设计稿中的示例时间线。当前接口未提供全量互关汇总，概览暂保留真实新增指标。日期筛选底部面板等设计交互尚未实现，见[设计与实现对照](docs/design/README.md#设计与实现对照)。
+
+手机显示采集状态摘要；浏览器启动、Cookie 管理和人工验证在电脑端操作。手机访问仍需另行配置安全连接，本次 UI 改造不开放服务器或 CDP 端口。
+
 ## Agent Skills
 
 本项目内置公开可用的 Agent Skill Pack：
@@ -125,8 +145,6 @@ DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor
 ```
 
 ## 稳定性最佳实践
-
-手机布局（宽度不超过 600px）沿用 Figma 手机稿：底部四栏导航、双列指标、事件/粉丝/采集记录卡片与事件详情弹层。详情仅使用已保存的数据，不生成示例时间线。手机显示采集状态摘要，浏览器启动、Cookie 管理和验证码在电脑端操作；桌面布局与控制能力保留。当前接口未提供全量互关汇总，概览暂保留真实新增指标。手机访问仍需要另行配置安全连接，此布局改造不开放服务器或 CDP 端口。
 
 开源通用场景推荐按这个顺序选择 runtime：
 
