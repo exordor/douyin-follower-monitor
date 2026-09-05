@@ -21,7 +21,6 @@ function parseArgs(argv) {
     profile: process.env.DOUYIN_PROFILE ? path.resolve(ROOT_DIR, process.env.DOUYIN_PROFILE) : path.join(ROOT_DIR, '.douyin-browser'),
     runtime: process.env.DOUYIN_RUNTIME || 'auto',
     cdpUrl: process.env.DOUYIN_CDP_URL || '',
-    browserApp: process.env.DOUYIN_BROWSER_APP || '',
     cookieFile: process.env.DOUYIN_COOKIE_FILE ? path.resolve(ROOT_DIR, process.env.DOUYIN_COOKIE_FILE) : '',
     outDir: path.join(ROOT_DIR, 'data'),
     headless: false,
@@ -61,7 +60,6 @@ function parseArgs(argv) {
     else if (arg === '--profile') options.profile = path.resolve(ROOT_DIR, next());
     else if (arg === '--runtime') options.runtime = next();
     else if (arg === '--cdp-url') options.cdpUrl = next();
-    else if (arg === '--browser-app') options.browserApp = next();
     else if (arg === '--cookie-file') options.cookieFile = path.resolve(ROOT_DIR, next());
     else if (arg === '--out-dir') options.outDir = path.resolve(ROOT_DIR, next());
     else if (arg === '--mode') options.mode = next();
@@ -127,10 +125,9 @@ function printHelp() {
 
 Options:
   --target <url>         Douyin profile URL (default: ${DEFAULT_TARGET})
-  --runtime <runtime>    Browser runtime: auto, playwright, cdp, apple-events (default: auto)
+  --runtime <runtime>    Browser runtime: auto, playwright, cdp (default: auto)
   --profile <path>       Browser profile directory (default: .douyin-browser)
   --cdp-url <url>        Chrome DevTools Protocol endpoint, e.g. http://127.0.0.1:9222
-  --browser-app <app>    Use the active tab of an existing browser app/bundle id
   --cookie-file <path>   cookie-manager lossless JSON for playwright/cdp runtime
   --out-dir <path>       Output directory (default: data)
   --api                  Use Douyin's in-page follower API instead of DOM scrolling
@@ -1840,13 +1837,11 @@ async function waitForManualAuthIfNeeded(options, pageInfo) {
 function shouldUseBrowserRuntime(options) {
   return Boolean(
     options.api ||
-    options.browserApp ||
     options.cdpUrl ||
     options.cookieFile ||
     options.runtime !== 'auto' ||
     process.env.DOUYIN_RUNTIME ||
     process.env.DOUYIN_CDP_URL ||
-    process.env.DOUYIN_BROWSER_APP ||
     process.env.DOUYIN_COOKIE_FILE
   );
 }
@@ -1864,7 +1859,6 @@ async function prepareBrowserRuntime(options) {
   options.runtime = runtimeConfig.runtime;
   options.requestedRuntime = runtimeConfig.requestedRuntime;
   options.runtimeLabel = runtimeConfig.runtimeLabel;
-  options.browserApp = runtimeConfig.browserApp;
   options.cdpUrl = runtimeConfig.cdpUrl;
   options.profile = runtimeConfig.profile || options.profile;
   options.cookieFile = runtimeConfig.cookieFile || '';

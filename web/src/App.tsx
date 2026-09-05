@@ -79,7 +79,6 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 const RUNTIME_LABELS: Record<string, string> = {
-  'apple-events': '豆包浏览器',
   cdp: 'CDP',
   playwright: 'Playwright',
   demo: 'Demo'
@@ -794,15 +793,6 @@ function SetupPanel({
           </div>
         </article>
 
-        <article className="setup-card">
-          <span>macOS 快捷路径</span>
-          <strong>Apple Events / 豆包浏览器</strong>
-          <p>适合作者当前环境，但不是跨平台方案；开源用户优先尝试 CDP 或 Playwright。</p>
-          <div className="setup-command">
-            <code>npm run dashboard:doubao</code>
-            <CopyCommandButton command="npm run dashboard:doubao" disabled={isDemo} />
-          </div>
-        </article>
       </div>
 
       <div className="setup-checks">

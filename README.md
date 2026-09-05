@@ -90,20 +90,18 @@ npm run monitor
 npm run doctor
 npm run scan:recent
 npm run scan:full
-npm run monitor:doubao
-npm run collect:doubao:api
+npm run monitor
 npm run dashboard:dev
 ```
 
 ## Browser Runtime
 
-采集层通过 runtime adapter 连接已经登录的浏览器。默认 `auto` 规则是：传入 `--browser-app` 时使用 Apple Events；传入 `--cdp-url` 或 `DOUYIN_CDP_URL` 时使用 CDP；否则使用 Playwright 持久 profile。
+采集层通过 runtime adapter 连接已经登录的浏览器。默认 `auto` 规则是：传入 `--cdp-url` 或 `DOUYIN_CDP_URL` 时使用 CDP；否则使用 Playwright 持久 profile。
 
 | Runtime | 适用场景 | Cookie 导入 | 示例 |
 | --- | --- | --- | --- |
 | `playwright` | 跨平台默认入口，使用 `.douyin-browser` 持久 profile，首次运行需要登录 | 支持 | `npm run monitor` |
 | `cdp` | 连接已开启 remote debugging 的 Chrome/Edge/Chromium | 支持 | `DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor` |
-| `apple-events` | macOS 复用已登录豆包/Chrome 类浏览器标签页 | 不支持，直接复用浏览器登录态 | `npm run monitor:doubao` |
 
 CDP 示例：
 
@@ -115,20 +113,12 @@ CDP 示例：
 DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor
 ```
 
-豆包浏览器快捷入口：
-
-```bash
-npm run monitor:doubao
-npm run dashboard:doubao
-```
-
 ## 稳定性最佳实践
 
 开源通用场景推荐按这个顺序选择 runtime：
 
 1. 首选 `cdp`：连接已登录的 Chrome/Edge/Chromium，复用真实浏览器会话、cookie 和扩展环境。
 2. 次选 `playwright`：使用持久 profile，并可导入 cookie-manager 无损 JSON。
-3. `apple-events`：适合 macOS 复用豆包浏览器，但不适合作为跨平台默认方案。
 
 Dashboard 的“Runtime 健康”卡片会根据当前 runtime、Cookie 登录态和验证码等待状态给出建议。Cookie 只能复用你已经拥有的登录态，不能保证免验证码；如果平台要求验证，请人工完成。项目不实现验证码识别、模拟拖动、代理池规避或第三方打码。
 

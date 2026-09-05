@@ -208,12 +208,10 @@ export async function loadScanConfig(): Promise<ScanConfig> {
       runtimeLabel: 'Demo data',
       mode: 'monitor',
       cdpUrl: 'http://127.0.0.1:9222',
-      browserApp: '',
       cookieRuntimeSupported: false,
       canEdit: false,
       options: {
         runtimes: [
-          { value: 'apple-events', label: '豆包浏览器', detail: 'macOS Apple Events 复用当前浏览器' },
           { value: 'cdp', label: 'CDP', detail: '连接已登录 Chrome/Edge/Chromium' },
           { value: 'playwright', label: 'Playwright', detail: '持久 profile，可配合 Cookie 导入' }
         ],
@@ -264,7 +262,7 @@ export async function loadRuntimeHealth(): Promise<RuntimeHealthStatus> {
       runtimeLabel: 'Demo data',
       level: 'warning',
       headline: '公开演示不连接本地浏览器',
-      recommendation: 'Demo 站只展示 mock 数据；本地运行时会显示 Playwright、CDP 或 Apple Events 的真实健康状态。',
+      recommendation: '本地使用 CDP 或 Playwright 采集自己的粉丝数据。',
       recommendedRuntime: 'cdp',
       checks: [
         { id: 'runtime', label: '浏览器 Runtime', state: 'info', detail: 'Demo mode 不启动采集 runtime。' },

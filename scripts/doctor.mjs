@@ -17,7 +17,6 @@ function parseArgs(argv) {
     json: false,
     runtime: process.env.DOUYIN_RUNTIME || 'auto',
     cdpUrl: process.env.DOUYIN_CDP_URL || '',
-    browserApp: process.env.DOUYIN_BROWSER_APP || '',
     profile: process.env.DOUYIN_PROFILE ? path.resolve(ROOT_DIR, process.env.DOUYIN_PROFILE) : path.join(ROOT_DIR, '.douyin-browser'),
     outDir: path.join(ROOT_DIR, 'data'),
     cookieFile: process.env.DOUYIN_COOKIE_FILE ? path.resolve(ROOT_DIR, process.env.DOUYIN_COOKIE_FILE) : '',
@@ -34,7 +33,6 @@ function parseArgs(argv) {
     if (arg === '--json') options.json = true;
     else if (arg === '--runtime') options.runtime = next();
     else if (arg === '--cdp-url') options.cdpUrl = next();
-    else if (arg === '--browser-app') options.browserApp = next();
     else if (arg === '--profile') options.profile = path.resolve(ROOT_DIR, next());
     else if (arg === '--cookie-file') options.cookieFile = path.resolve(ROOT_DIR, next());
     else if (arg === '--out-dir') options.outDir = path.resolve(ROOT_DIR, next());
@@ -50,9 +48,8 @@ function printHelp() {
 
 Options:
   --json                Print machine-readable JSON
-  --runtime <runtime>   Browser runtime: auto, playwright, cdp, apple-events
+  --runtime <runtime>   Browser runtime: auto, playwright, cdp
   --cdp-url <url>       Chrome DevTools Protocol endpoint
-  --browser-app <id>    Browser app for Apple Events runtime
   --profile <path>      Playwright profile path
   --cookie-file <path>  cookie-manager lossless JSON path
   --out-dir <path>      Data directory to test (default: data)
@@ -151,7 +148,7 @@ async function runDoctor(options = {}) {
   let runtimeConfig;
   try {
     runtimeConfig = resolveBrowserRuntimeConfig(
-      { runtime: options.runtime, cdpUrl: options.cdpUrl, browserApp: options.browserApp, profile: options.profile, cookieFile: '' },
+      { runtime: options.runtime, cdpUrl: options.cdpUrl, profile: options.profile, cookieFile: '' },
       { ...process.env, DOUYIN_COOKIE_FILE: '' }
     );
     checks.push(check('runtime', 'ok', `Runtime resolves to ${runtimeConfig.runtimeLabel}`, { runtime: runtimeConfig.runtime }));

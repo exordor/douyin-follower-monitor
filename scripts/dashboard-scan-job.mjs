@@ -11,11 +11,9 @@ const MAX_LOG_LINES = 120;
 const MONITOR_EVENT_PREFIX = '__DOUYIN_MONITOR_EVENT__ ';
 const DEFAULT_AUTH_WAIT_SECONDS = 300;
 const DEFAULT_CDP_URL = 'http://127.0.0.1:9222';
-const DEFAULT_BROWSER_APP = 'com.bot.pc.doubao.browser';
-const ALLOWED_DASHBOARD_RUNTIMES = new Set(['playwright', 'cdp', 'apple-events']);
+const ALLOWED_DASHBOARD_RUNTIMES = new Set(['playwright', 'cdp']);
 const ALLOWED_SCAN_MODES = new Set(['monitor', 'recent', 'full']);
 const RUNTIME_OPTIONS = [
-  { value: 'apple-events', label: '豆包浏览器', detail: 'macOS Apple Events 复用当前浏览器' },
   { value: 'cdp', label: 'CDP', detail: '连接已登录 Chrome/Edge/Chromium' },
   { value: 'playwright', label: 'Playwright', detail: '持久 profile，可配合 Cookie 导入' }
 ];
@@ -36,7 +34,7 @@ function trimLogLines(lines) {
 function normalizeDashboardRuntime(value) {
   const runtime = String(value || '').trim().toLowerCase();
   if (!ALLOWED_DASHBOARD_RUNTIMES.has(runtime)) {
-    throw new Error('runtime-must-be-playwright-cdp-or-apple-events');
+    throw new Error('runtime-must-be-playwright-or-cdp');
   }
   return runtime;
 }
@@ -63,10 +61,9 @@ function normalizeCdpUrl(value) {
   return parsed.toString().replace(/\/$/, '');
 }
 
-function initialDashboardRuntime(runtime, cdpUrl, browserApp) {
+function initialDashboardRuntime(runtime, cdpUrl) {
   const requested = String(runtime || 'auto').trim().toLowerCase();
-  if (ALLOWED_DASHBOARD_RUNTIMES.has(requested)) return requested;
-  if (browserApp) return 'apple-events';
+  if (requested !== 'auto') return normalizeDashboardRuntime(requested);
   if (cdpUrl) return 'cdp';
   return 'playwright';
 }
@@ -361,7 +358,6 @@ function createScanJobManager({
   runtime = process.env.DOUYIN_RUNTIME || 'auto',
   profile,
   cdpUrl = process.env.DOUYIN_CDP_URL || '',
-  browserApp = process.env.DOUYIN_BROWSER_APP || '',
   cookieFile = process.env.DOUYIN_COOKIE_FILE || defaultCookieFile(outDir),
   authWaitSeconds = Number.parseInt(process.env.DOUYIN_AUTH_WAIT_SECONDS || `${DEFAULT_AUTH_WAIT_SECONDS}`, 10),
   collectorPath = path.join(rootDir, 'scripts', 'collect-followers.mjs'),
@@ -376,11 +372,10 @@ function createScanJobManager({
     ? authWaitSeconds
     : DEFAULT_AUTH_WAIT_SECONDS;
   let scanConfig = {
-    runtime: initialDashboardRuntime(runtime, cdpUrl, browserApp),
+    runtime: initialDashboardRuntime(runtime, cdpUrl),
     mode: 'monitor',
     profile,
     cdpUrl: cdpUrl ? normalizeCdpUrl(cdpUrl) : DEFAULT_CDP_URL,
-    browserApp: browserApp || DEFAULT_BROWSER_APP,
     cookieFile,
     authWaitSeconds: resolvedAuthWaitSeconds
   };
@@ -391,7 +386,6 @@ function createScanJobManager({
         runtime: scanConfig.runtime,
         profile: scanConfig.profile,
         cdpUrl: scanConfig.runtime === 'cdp' ? normalizeCdpUrl(scanConfig.cdpUrl) : scanConfig.cdpUrl,
-        browserApp: scanConfig.runtime === 'apple-events' ? (scanConfig.browserApp || DEFAULT_BROWSER_APP) : scanConfig.browserApp,
         cookieFile: ''
       },
       { ...process.env, DOUYIN_COOKIE_FILE: '' }
@@ -409,7 +403,6 @@ function createScanJobManager({
       runtimeLabel: runtimeConfig.runtimeLabel,
       mode: scanConfig.mode,
       cdpUrl: scanConfig.cdpUrl,
-      browserApp: runtimeConfig.browserApp || '',
       cookieRuntimeSupported: runtimeSupportsCookieAuth(runtimeConfig.runtime),
       canEdit: !isActive(currentJob),
       options: {
@@ -513,7 +506,6 @@ function createScanJobManager({
     ];
     if (runtimeConfig.profile) args.push('--profile', runtimeConfig.profile);
     if (runtimeConfig.cdpUrl) args.push('--cdp-url', runtimeConfig.cdpUrl);
-    if (runtimeConfig.browserApp) args.push('--browser-app', runtimeConfig.browserApp);
     if (supportsCookieAuth && job.cookieAuth?.configured) args.push('--cookie-file', scanConfig.cookieFile);
 
     const childEnv = { ...process.env, DOUYIN_COOKIE_FILE: '' };
@@ -617,7 +609,6 @@ function createScanJobManager({
       if (patch.mode !== undefined) next.mode = normalizeScanMode(patch.mode);
       if (patch.cdpUrl !== undefined) next.cdpUrl = normalizeCdpUrl(patch.cdpUrl);
       if (next.runtime === 'cdp') next.cdpUrl = normalizeCdpUrl(next.cdpUrl);
-      if (next.runtime === 'apple-events') next.browserApp = next.browserApp || DEFAULT_BROWSER_APP;
 
       scanConfig = next;
       const config = getConfig();

@@ -114,7 +114,6 @@ async function doctorReport(rootDir = ROOT_DIR) {
     return sanitizeJson(await runDoctor({
       runtime: process.env.DOUYIN_RUNTIME || 'auto',
       cdpUrl: process.env.DOUYIN_CDP_URL || '',
-      browserApp: process.env.DOUYIN_BROWSER_APP || '',
       profile: process.env.DOUYIN_PROFILE || path.join(rootDir, '.douyin-browser'),
       outDir: path.join(rootDir, 'data'),
       cookieFile: process.env.DOUYIN_COOKIE_FILE || path.join(rootDir, 'data', 'auth', 'douyin-cookies.json')

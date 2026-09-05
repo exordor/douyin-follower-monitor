@@ -25,7 +25,7 @@ npm run doctor
 
 - Diagnose setup and runtime health.
 - Explain `monitor` recent/full decision behavior.
-- Help choose `cdp`, `playwright`, or `apple-events`.
+- Help choose `cdp` or `playwright`.
 - Review privacy safety before a PR or release.
 - Prepare issue guidance from sanitized output.
 - Point users to existing dashboard, troubleshooting, debug-bundle, and launchd commands.

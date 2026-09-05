@@ -47,7 +47,6 @@ try {
   const report = await runDoctor({
     runtime: 'playwright',
     cdpUrl: '',
-    browserApp: '',
     profile: path.join(dir, 'profile'),
     outDir,
     cookieFile

@@ -30,9 +30,7 @@ npm run skills:control -- <action> --yes
 - `privacy-check`
 - `debug-bundle`
 - `monitor`
-- `monitor-doubao`
 - `dashboard`
-- `dashboard-doubao`
 - `launchd-install-hourly`
 - `launchd-status`
 - `launchd-kickstart`

@@ -19,9 +19,7 @@ const EXPECTED_SCRIPTS = [
   'privacy:check',
   'debug:bundle',
   'monitor',
-  'monitor:doubao',
   'dashboard',
-  'dashboard:doubao'
 ];
 
 function parseArgs(argv) {
@@ -87,7 +85,6 @@ async function doctorSummary(rootDir, includeDoctor) {
     const report = await runDoctor({
       runtime: process.env.DOUYIN_RUNTIME || 'auto',
       cdpUrl: process.env.DOUYIN_CDP_URL || '',
-      browserApp: process.env.DOUYIN_BROWSER_APP || '',
       profile: process.env.DOUYIN_PROFILE ? path.resolve(rootDir, process.env.DOUYIN_PROFILE) : path.join(rootDir, '.douyin-browser'),
       outDir: path.join(rootDir, 'data'),
       cookieFile: process.env.DOUYIN_COOKIE_FILE || path.join(rootDir, 'data', 'auth', 'douyin-cookies.json')
@@ -170,7 +167,6 @@ async function buildSkillInspectReport({ rootDir = ROOT_DIR, includeDoctor = tru
       runtime: process.env.DOUYIN_RUNTIME || 'auto',
       cdpConfigured: Boolean(process.env.DOUYIN_CDP_URL),
       cookieFileConfigured: Boolean(process.env.DOUYIN_COOKIE_FILE),
-      browserAppConfigured: Boolean(process.env.DOUYIN_BROWSER_APP)
     },
     doctor: await doctorSummary(rootDir, includeDoctor),
     data: {

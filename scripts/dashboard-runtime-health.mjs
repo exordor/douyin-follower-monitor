@@ -7,7 +7,6 @@ function check(id, label, state, detail) {
 function runtimeName(runtime) {
   if (runtime === 'cdp') return 'CDP';
   if (runtime === 'playwright') return 'Playwright';
-  if (runtime === 'apple-events') return 'Apple Events';
   return runtime || 'Runtime';
 }
 
@@ -51,9 +50,6 @@ function runtimeCheck(runtime) {
   }
   if (runtime === 'playwright') {
     return check('runtime', '浏览器 Runtime', 'warn', '跨平台默认路径；新 profile 可能更容易触发人工验证。');
-  }
-  if (runtime === 'apple-events') {
-    return check('runtime', '浏览器 Runtime', 'info', 'macOS 便捷路径；开源跨平台部署建议使用 CDP 或 Playwright。');
   }
   return check('runtime', '浏览器 Runtime', 'warn', 'Runtime 未识别，请检查 dashboard 启动参数。');
 }
@@ -131,18 +127,6 @@ function buildRuntimeHealth({ scanStatus = {}, cookieAuth = null, latestError = 
     };
   }
 
-  if (runtime === 'apple-events') {
-    return {
-      runtime,
-      runtimeLabel,
-      level: 'ok',
-      headline: 'macOS 便捷路径可用',
-      recommendation: '当前会复用已登录浏览器。作为通用开源部署，推荐记录 CDP 或 Playwright 配置。',
-      recommendedRuntime: 'cdp',
-      checks,
-      commandHint: CDP_COMMAND_HINT
-    };
-  }
 
   return {
     runtime,

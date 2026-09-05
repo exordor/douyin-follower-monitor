@@ -37,7 +37,7 @@ function scanStatus(runtime, overrides = {}) {
     profileFollowerCount: null,
     hiddenOrUnavailableCount: null,
     runtime,
-    runtimeLabel: runtime === 'cdp' ? 'Chrome DevTools Protocol' : runtime === 'playwright' ? 'Playwright profile' : 'Apple Events browser',
+    runtimeLabel: runtime === 'cdp' ? 'Chrome DevTools Protocol' : runtime === 'playwright' ? 'Playwright profile' : 'Unknown runtime',
     cookieAuth: null,
     phase: 'idle',
     authChallenge: null,
@@ -100,10 +100,6 @@ const playwrightCookie = buildRuntimeHealth({ scanStatus: scanStatus('playwright
 assert.equal(playwrightCookie.level, 'warning');
 assert.equal(playwrightCookie.checks.find((item) => item.id === 'cookie-auth')?.state, 'pass');
 
-const appleEvents = buildRuntimeHealth({ scanStatus: scanStatus('apple-events'), cookieAuth: { ...cookieAuth(false), runtimeSupported: false } });
-assert.equal(appleEvents.level, 'ok');
-assert.equal(appleEvents.recommendedRuntime, 'cdp');
-assert.equal(appleEvents.checks.find((item) => item.id === 'cookie-auth')?.state, 'info');
 
 const waiting = buildRuntimeHealth({
   scanStatus: scanStatus('playwright', {

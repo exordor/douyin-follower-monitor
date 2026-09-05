@@ -5,7 +5,7 @@ const ERROR_PATTERNS = [
   ['douyin_api_unavailable', /follower API module is not available|粉丝接口|Douyin follower API/i],
   ['douyin_api_shape_changed', /webpack runtime is not available|webpack|返回异常|statusCode|shape/i],
   ['profile_count_unavailable', /读取主页计数失败|profile stats|主页计数/i],
-  ['runtime_unavailable', /requires --cdp-url|requires --browser-app|browser runtime|Cannot find module|executable doesn't exist|Target page/i]
+  ['runtime_unavailable', /requires --cdp-url|browser runtime|Cannot find module|executable doesn't exist|Target page/i]
 ];
 
 function classifyCollectorError(error) {

@@ -245,6 +245,7 @@ try {
   const scanConfig = await requestJson(port, 'GET', '/api/scan/config');
   assert.equal(scanConfig.statusCode, 200);
   assert.equal(scanConfig.body.runtime, 'cdp');
+  assert.deepEqual(scanConfig.body.options.runtimes.map((item) => item.value), ['cdp', 'playwright']);
   assert.equal(scanConfig.body.mode, 'monitor');
   assert.equal(scanConfig.body.cdpUrl, 'http://127.0.0.1:9222');
 
@@ -260,6 +261,11 @@ try {
     'x-douyin-dashboard-action': 'scan'
   }, { runtime: 'shell' });
   assert.equal(invalidConfig.statusCode, 400);
+  const retiredConfig = await requestJson(port, 'POST', '/api/scan/config', {
+    'x-douyin-dashboard-action': 'scan'
+  }, { runtime: 'apple-events' });
+  assert.equal(retiredConfig.statusCode, 400);
+  assert.equal(retiredConfig.body.config.runtime, 'cdp');
 
   const importForbidden = await requestJson(port, 'POST', '/api/auth/cookies/import', {
     origin: 'https://example.com',

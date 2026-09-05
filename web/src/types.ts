@@ -216,7 +216,6 @@ export interface ScanConfig {
   runtimeLabel: string;
   mode: string;
   cdpUrl: string;
-  browserApp: string;
   cookieRuntimeSupported: boolean;
   canEdit: boolean;
   options: {
@@ -241,7 +240,7 @@ export interface RuntimeHealthStatus {
   level: RuntimeHealthLevel;
   headline: string;
   recommendation: string;
-  recommendedRuntime: 'cdp' | 'playwright' | 'apple-events';
+  recommendedRuntime: 'cdp' | 'playwright';
   checks: RuntimeHealthCheck[];
   commandHint?: string;
 }

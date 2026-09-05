@@ -31,7 +31,6 @@ import { createScanJobManager } from './dashboard-scan-job.mjs';
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DEFAULT_STATIC_DIR = path.join(ROOT_DIR, 'web', 'dist');
-const DEFAULT_BROWSER_APP = 'com.bot.pc.doubao.browser';
 
 const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -57,7 +56,6 @@ function parseArgs(argv) {
     runtime: process.env.DOUYIN_RUNTIME || 'auto',
     profile: process.env.DOUYIN_PROFILE || path.join(ROOT_DIR, '.douyin-browser'),
     cdpUrl: process.env.DOUYIN_CDP_URL || '',
-    browserApp: process.env.DOUYIN_BROWSER_APP || '',
     cookieFile: process.env.DOUYIN_COOKIE_FILE ? path.resolve(process.env.DOUYIN_COOKIE_FILE) : '',
     authWaitSeconds: Number.parseInt(process.env.DOUYIN_AUTH_WAIT_SECONDS || '300', 10)
   };
@@ -72,10 +70,10 @@ function parseArgs(argv) {
     else if (arg === '--runtime') options.runtime = argv[++index];
     else if (arg === '--profile') options.profile = path.resolve(argv[++index]);
     else if (arg === '--cdp-url') options.cdpUrl = argv[++index];
-    else if (arg === '--browser-app') options.browserApp = argv[++index];
     else if (arg === '--cookie-file') options.cookieFile = path.resolve(argv[++index]);
     else if (arg === '--auth-wait-seconds') options.authWaitSeconds = Number.parseInt(argv[++index], 10);
     else if (arg === '--help' || arg === '-h') options.help = true;
+    else throw new Error(`Unknown argument: ${arg}`);
   }
 
   if (!Number.isFinite(options.authWaitSeconds) || options.authWaitSeconds < 0) options.authWaitSeconds = 300;
@@ -91,10 +89,9 @@ Options:
   --port <number>      HTTP port (default: 4573)
   --host <host>        Bind host (default: 127.0.0.1)
   --static-dir <path>  Built dashboard directory (default: web/dist)
-  --runtime <runtime>  Browser runtime: auto, playwright, cdp, apple-events (default: auto)
+  --runtime <runtime>  Browser runtime: auto, playwright, cdp (default: auto)
   --profile <path>     Playwright profile path (default: .douyin-browser)
   --cdp-url <url>      Chrome DevTools Protocol endpoint
-  --browser-app <id>   Browser bundle id used by apple-events runtime, e.g. ${DEFAULT_BROWSER_APP}
   --cookie-file <path> cookie-manager lossless JSON for playwright/cdp runtime
   --auth-wait-seconds <n>
                        Seconds dashboard-launched scans wait for manual login/captcha (default: 300)
@@ -431,7 +428,6 @@ function createDashboardServer(options = {}) {
     runtime: options.runtime || 'auto',
     profile: options.profile || path.join(ROOT_DIR, '.douyin-browser'),
     cdpUrl: options.cdpUrl || '',
-    browserApp: options.browserApp || '',
     cookieFile: options.cookieFile || '',
     authWaitSeconds: options.authWaitSeconds ?? 300
   };
@@ -443,7 +439,6 @@ function createDashboardServer(options = {}) {
     runtime: resolvedOptions.runtime,
     profile: resolvedOptions.profile,
     cdpUrl: resolvedOptions.cdpUrl,
-    browserApp: resolvedOptions.browserApp,
     cookieFile: resolvedOptions.cookieFile,
     authWaitSeconds: resolvedOptions.authWaitSeconds
   });

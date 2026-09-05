@@ -20,7 +20,7 @@ body:
       label: 复现步骤
       description: 给出最小复现命令和操作。
       placeholder: |
-        1. 运行 npm run monitor:doubao
+        1. 运行 npm run monitor
         2. 打开 dashboard
         3. ...
     validations:
@@ -35,6 +35,6 @@ body:
     id: environment
     attributes:
       label: 环境
-      placeholder: "macOS 15, Node 24.13.1, 豆包浏览器 ..."
+      placeholder: "操作系统版本、Node 24、Chrome/Edge/Chromium 版本、CDP 或 Playwright"
     validations:
       required: true
