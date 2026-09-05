@@ -1,4 +1,5 @@
 import process from 'node:process';
+import { ensureCdpBrowser } from './cdp-browser.mjs';
 
 import { applyCookieAuthToContext } from './cookie-auth.mjs';
 
@@ -175,6 +176,11 @@ class CdpRuntime {
 
   async ensureConnection() {
     if (this.browser) return;
+    // Remote CDP remains attach-only; only local HTTP endpoints are auto-started.
+    const endpoint = new URL(this.cdpUrl);
+    if (endpoint.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname)) {
+      await ensureCdpBrowser(this.cdpUrl);
+    }
     const { chromium } = await import('playwright');
     this.browser = await chromium.connectOverCDP(this.cdpUrl, { noDefaults: true });
     this.context = this.browser.contexts()[0] || await this.browser.newContext();
@@ -189,13 +195,14 @@ class CdpRuntime {
 
   async openOrFocusTarget(target = DEFAULT_TARGET) {
     await this.ensureConnection();
+    const applyingCookies = !this.cookiesApplied;
     await this.applyCookieAuth();
     const pages = this.context.pages();
     this.page = pages.find((page) => isTargetPageUrl(page.url(), target)) ||
       pages.find((page) => isDouyinUrl(page.url())) ||
       pages[0] ||
       (await this.context.newPage());
-    if (!isTargetPageUrl(this.page.url(), target)) {
+    if (!isTargetPageUrl(this.page.url(), target) || (applyingCookies && this.cookieAuthSummary?.acceptedCount > 0)) {
       await this.page.goto(target, { waitUntil: 'domcontentloaded', timeout: 90_000 });
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }

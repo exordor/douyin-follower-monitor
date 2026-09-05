@@ -234,6 +234,10 @@ export async function startScanJob(): Promise<{ status: ScanJobStatus }> {
   return mutateJson('/api/scan/start', 'POST', 'scan');
 }
 
+export async function openCdpBrowser(): Promise<{ launched: boolean; message: string }> {
+  return mutateJson('/api/scan/browser', 'POST', 'scan');
+}
+
 export async function stopScanJob(): Promise<{ status: ScanJobStatus }> {
   return mutateJson('/api/scan/stop', 'POST', 'scan');
 }

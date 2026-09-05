@@ -164,6 +164,10 @@ try {
   assert.equal(await page.locator('#events select').first().inputValue(), '');
   await page.getByRole('link', { name: '采集设置', exact: true }).click();
   await expectText(page, 'Runtime 健康');
+  await page.getByRole('button', { name: 'CDP', exact: true }).click();
+  await page.route('**/api/scan/browser', route => route.fulfill({ json: { launched: false, message: '采集浏览器已连接，可继续采集。' } }));
+  await page.getByRole('button', { name: '打开采集浏览器', exact: true }).click({ timeout: 3000 });
+  await expectText(page, '采集浏览器已连接，可继续采集。');
   await page.getByText('连接帮助与首次设置', { exact: true }).click();
   await expectText(page, 'Setup / 快速开始');
   await expectText(page, 'Run detail');

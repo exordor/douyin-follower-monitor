@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import type { ChangeEvent, ReactNode } from 'react';
 
-import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadRunCompare, loadRunDetail, loadRunEvents, loadRuntimeHealth, loadScanConfig, loadScanStatus, startScanJob, stopScanJob, updateScanConfig } from './api';
+import { clearCookieAuth, connectScanEvents, exportUrl, importCookieAuth, isDemoMode, loadCookieAuthStatus, loadEvents, loadFollowers, loadOverview, loadRunCompare, loadRunDetail, loadRunEvents, loadRuntimeHealth, loadScanConfig, loadScanStatus, openCdpBrowser, startScanJob, stopScanJob, updateScanConfig } from './api';
 import { EventBars, StatusDonut, TrendChart } from './components/Charts';
 import type { CookieAuthStatus, EventType, Follower, FollowerEvent, FollowerStatus, OverviewData, Page, RelationshipStatus, RuntimeHealthStatus, RunCompareResult, ScanConfig, ScanJobStatus, ScanRun, ScanRunDetail } from './types';
 
@@ -899,6 +899,17 @@ function ScanControlPanel({
   onCookieClear: () => void;
 }) {
   const cookieInputRef = useRef<HTMLInputElement>(null);
+  const [browserBusy, setBrowserBusy] = useState(false);
+  const [browserMessage, setBrowserMessage] = useState('');
+  const [browserError, setBrowserError] = useState('');
+  const handleOpenBrowser = async () => {
+    setBrowserBusy(true);
+    setBrowserMessage('');
+    setBrowserError('');
+    try { setBrowserMessage((await openCdpBrowser()).message); }
+    catch (error) { setBrowserError(error instanceof Error ? error.message : '浏览器启动失败'); }
+    finally { setBrowserBusy(false); }
+  };
   const [now, setNow] = useState(Date.now());
   const [cdpDraft, setCdpDraft] = useState(config?.cdpUrl || 'http://127.0.0.1:9222');
   const hasStatus = Boolean(status);
@@ -1034,6 +1045,10 @@ function ScanControlPanel({
               >
                 保存
               </button>
+              <button className="button compact" type="button" onClick={handleOpenBrowser}
+                disabled={configDisabled || browserBusy || cdpDraft !== config?.cdpUrl}>
+                {browserBusy ? '正在连接…' : '打开采集浏览器'}
+              </button>
             </div>
           </div>
         )}
@@ -1045,6 +1060,10 @@ function ScanControlPanel({
           <span>{configError}</span>
         </div>
       )}
+
+      {activeRuntime === 'cdp' && <p className="muted">自动启动专用 Chrome 并载入已有 Cookie；仅在 Cookie 失效或出现验证码时需要手动处理。</p>}
+      {browserMessage && <p role="status">{browserMessage}</p>}
+      {browserError && <div className="scan-error" role="alert">{browserError}</div>}
 
       <div className="scan-grid">
         <div><span>状态</span><strong>{hasStatus ? <StatusPill value={status!.status} /> : '-'}</strong></div>

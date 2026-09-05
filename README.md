@@ -105,14 +105,18 @@ npm run dashboard:dev
 | Runtime | 适用场景 | Cookie 导入 | 示例 |
 | --- | --- | --- | --- |
 | `playwright` | 跨平台默认入口，使用 `.douyin-browser` 持久 profile，首次运行需要登录 | 支持 | `npm run monitor` |
-| `cdp` | 连接已开启 remote debugging 的 Chrome/Edge/Chromium | 支持 | `DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor` |
+| `cdp` | 复用本机 CDP；未启动时自动打开专用 Chrome | 支持 | `DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor` |
 
-CDP 示例：
+CDP 采集现在会自动打开专用 Chrome，也可在「采集设置」点击「打开采集浏览器」。两种入口都会载入项目已导入的 Cookie 并刷新目标页。默认使用 `$HOME/.douyin-cdp-profile` 持久保存浏览器状态，不关闭日常 Chrome。仅在 Cookie 失效或出现验证码时需手动处理；没有 Cookie 时可手动登录。已有 CDP 浏览器会直接复用。
+
+可选环境变量：`DOUYIN_CHROME_PATH` 指定 Chrome 可执行文件，`DOUYIN_CDP_PROFILE` 指定专用数据目录（不要使用日常 Chrome 的默认目录）。本机端口被占用、配置目录锁定或启动超时会明确报错，不自动杀进程或删除锁。远程 CDP 仍仅连接，不自动启动。电脑休眠期间不能采集。
+
+手动启动示例（通常不再需要）：
 
 ```bash
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
   --remote-debugging-port=9222 \
-  --user-data-dir=/tmp/douyin-cdp-profile
+  --user-data-dir="$HOME/.douyin-cdp-profile"
 
 DOUYIN_CDP_URL=http://127.0.0.1:9222 npm run monitor
 ```

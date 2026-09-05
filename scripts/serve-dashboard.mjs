@@ -28,6 +28,8 @@ import {
 } from './dashboard-data.mjs';
 import { buildRuntimeHealth } from './dashboard-runtime-health.mjs';
 import { createScanJobManager } from './dashboard-scan-job.mjs';
+import { ensureCdpBrowser } from './cdp-browser.mjs';
+import { createBrowserRuntime } from './browser-runtime.mjs';
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DEFAULT_STATIC_DIR = path.join(ROOT_DIR, 'web', 'dist');
@@ -191,7 +193,40 @@ async function readJsonIfExists(filePath) {
   }
 }
 
-async function handleScanApi(req, res, url, scanManager) {
+async function handleScanApi(req, res, url, scanManager, options) {
+  if (url.pathname === '/api/scan/browser') {
+    if (req.method !== 'POST') {
+      sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req, true));
+    } else if (!allowedDashboardAction(req, 'scan')) {
+      sendJson(res, 403, { error: 'scan-post-forbidden' }, corsHeadersFor(req, true));
+    } else {
+      try {
+        const config = await scanManager.config();
+        if (config.runtime !== 'cdp') {
+          sendJson(res, 409, { error: '请先将采集 Runtime 切换为 CDP。' }, corsHeadersFor(req, true));
+        } else {
+          const result = await ensureCdpBrowser(config.cdpUrl);
+          const auth = await getCookieAuthStatus({ cookieFile: options.cookieFile, runtime: 'cdp' });
+          if (auth.error) throw new Error('已有 Cookie 文件无法使用，请在设置页检查或重新导入。');
+          const runtime = await createBrowserRuntime({ runtime: 'cdp', cdpUrl: config.cdpUrl, cookieFile: auth.configured ? options.cookieFile : '' }, {});
+          try {
+            await runtime.openOrFocusTarget();
+            const cookieApplied = runtime.cookieAuthSummary?.acceptedCount > 0;
+            sendJson(res, 200, {
+              ...result,
+              cookieApplied,
+              message: cookieApplied
+                ? '采集浏览器已就绪，已载入项目 Cookie；仅在登录失效或出现验证码时需要手动处理。'
+                : '采集浏览器已就绪，正在复用浏览器登录状态；如未登录，请导入 Cookie 或手动登录。'
+            }, corsHeadersFor(req, true));
+          } finally { await runtime.close(); }
+        }
+      } catch (error) {
+        sendJson(res, 503, { error: error.message }, corsHeadersFor(req, true));
+      }
+    }
+    return true;
+  }
   if (url.pathname === '/api/scan/events') {
     if (req.method !== 'GET') {
       sendJson(res, 405, { error: 'method-not-allowed' }, corsHeadersFor(req));
@@ -319,7 +354,7 @@ async function handleApi(req, res, url, options, scanManager) {
   const common = { dbPath: options.db, outDir: options.outDir };
 
   if (url.pathname.startsWith('/api/scan/')) {
-    return handleScanApi(req, res, url, scanManager);
+    return handleScanApi(req, res, url, scanManager, options);
   }
   if (url.pathname.startsWith('/api/auth/cookies')) {
     return handleAuthApi(req, res, url, options, scanManager);
