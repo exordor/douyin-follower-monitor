@@ -9,6 +9,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 assert.equal(typeof cdp.ensureCdpBrowser, 'function', 'CDP readiness must auto-start a dedicated browser');
+assert.equal(typeof cdp.resolveCdpProfileDir, 'function');
+assert.equal(cdp.resolveCdpProfileDir({}, {}), path.join(os.homedir(), 'BrowserProfiles', 'douyin-follower'));
+assert.equal(cdp.resolveCdpProfileDir({}, { DOUYIN_CDP_PROFILE: '/tmp/other-project' }), '/tmp/other-project');
 const server = createServer((req, res) => res.end(JSON.stringify({ Browser: 'Chrome/140', webSocketDebuggerUrl: `ws://127.0.0.1:${server.address().port}/devtools/browser/test` })));
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}`;

@@ -8,6 +8,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const pending = new Map();
 
+export function resolveCdpProfileDir(options = {}, env = process.env) {
+  return path.resolve(options.profileDir || env.DOUYIN_CDP_PROFILE || path.join(homedir(), 'BrowserProfiles', 'douyin-follower'));
+}
+
 function localEndpoint(value) {
   const url = new URL(value);
   if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
@@ -53,7 +57,7 @@ async function launch(url, options) {
   if (await ready(url)) return { launched: false, message: '采集浏览器已连接，可继续采集。' };
   if (await portInUse(url)) throw new Error('CDP 端口已被占用，但不是可用的 Chrome 调试服务。请检查端口或修改 CDP 地址。');
   const chrome = await executable(options.executablePath || process.env.DOUYIN_CHROME_PATH);
-  const profileDir = path.resolve(options.profileDir || process.env.DOUYIN_CDP_PROFILE || path.join(homedir(), '.douyin-cdp-profile'));
+  const profileDir = resolveCdpProfileDir(options);
   try {
     await lstat(path.join(profileDir, 'SingletonLock'));
     throw new Error('采集浏览器配置目录被锁定。请先正常退出使用该专用目录的 Chrome 后重试；不会自动删除锁或关闭日常浏览器。');
