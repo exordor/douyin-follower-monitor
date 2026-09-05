@@ -32,4 +32,3 @@ The monitor must highlight the high-value case where an account was explicitly o
 - SQLite schema migrates in place from version 1 to version 2.
 - Existing rows receive `relationshipStatus = 'unknown'` and `relationshipObservedAt = NULL`.
 - No new dependency is added.
-
