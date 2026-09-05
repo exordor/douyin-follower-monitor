@@ -37,10 +37,11 @@
 
 ![关系事件设计稿](docs/design/assets/desktop-events.png)
 
-<p>
-  <img src="docs/design/assets/mobile-events.png" width="195" alt="手机端关系事件设计稿" />
-  <img src="docs/design/assets/mobile-event-detail.png" width="195" alt="手机端事件详情设计稿" />
-</p>
+手机端：先看谁发生了变化，再展开查看事件记录。
+
+![手机端关系事件设计稿](docs/design/assets/mobile-events.png)
+
+![手机端事件详情设计稿](docs/design/assets/mobile-event-detail.png)
 
 [在线演示](https://exordor.github.io/douyin-follower-monitor)使用虚构数据，不连接你的抖音账号。
 
