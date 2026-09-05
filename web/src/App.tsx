@@ -176,7 +176,26 @@ function metricCards(data: OverviewData) {
   ];
 }
 
+const VIEWS = {
+  overview: { title: '概览', description: '先看关系变化，再看整体趋势。', icon: BarChart3 },
+  events: { title: '关系事件', description: '专注谁离开了，以及这个结论是如何确认的。', icon: History },
+  followers: { title: '粉丝列表', description: '搜索账号与查看当前记录，不与事件历史混在一起。', icon: CircleDot },
+  settings: { title: '采集设置', description: '连接方式、采集记录和诊断集中管理。', icon: ShieldCheck }
+};
+type View = keyof typeof VIEWS;
+function currentView(): View {
+  const hash = window.location.hash.slice(1);
+  if (hash === 'setup' || hash === 'runs') return 'settings';
+  return Object.hasOwn(VIEWS, hash) ? hash as View : 'overview';
+}
+
 function App() {
+  const [view, setView] = useState<View>(currentView);
+  useEffect(() => {
+    const navigate = () => { setView(currentView()); window.scrollTo(0, 0); };
+    window.addEventListener('hashchange', navigate);
+    return () => window.removeEventListener('hashchange', navigate);
+  }, []);
   const [data, setData] = useState<OverviewData | null>(null);
   const [followers, setFollowers] = useState<Page<Follower> | null>(null);
   const [events, setEvents] = useState<Page<FollowerEvent> | null>(null);
@@ -186,7 +205,7 @@ function App() {
   const [followerQuery, setFollowerQuery] = useState('');
   const [followerLimit, setFollowerLimit] = useState(DEFAULT_PAGE_SIZE);
   const [followerOffset, setFollowerOffset] = useState(0);
-  const [eventType, setEventType] = useState('');
+  const [eventType, setEventType] = useState('mutual_unfollowed_you');
   const [eventQuery, setEventQuery] = useState('');
   const [eventLimit, setEventLimit] = useState(DEFAULT_PAGE_SIZE);
   const [eventOffset, setEventOffset] = useState(0);
@@ -219,8 +238,6 @@ function App() {
       .then((overview) => {
         if (!alive) return;
         setData(overview);
-        setFollowers(overview.followers);
-        setEvents(overview.events);
         setSelectedRunId((current) => current || overview.runs[0]?.runId || '');
         setCompareFrom((current) => current || overview.runs[1]?.runId || overview.runs[0]?.runId || '');
         setCompareTo((current) => current || overview.runs[0]?.runId || '');
@@ -478,16 +495,14 @@ function App() {
         <div className="brand">
           <div className="brand-mark">DF</div>
           <div>
-            <strong>Douyin Monitor</strong>
-            <span>Local-first ledger</span>
+            <strong>FOLLOW / 关系观察</strong>
+            <span>抖音粉丝监控</span>
           </div>
         </div>
-        <nav className="nav">
-          <a className="nav-item active" href="#overview"><BarChart3 size={18} />总览</a>
-          <a className="nav-item" href="#setup"><ShieldCheck size={18} />Setup</a>
-          <a className="nav-item" href="#events"><History size={18} />事件</a>
-          <a className="nav-item" href="#followers"><CircleDot size={18} />粉丝</a>
-          <a className="nav-item" href="#runs"><GitBranch size={18} />扫描</a>
+        <nav className="nav" aria-label="主导航">
+          {Object.entries(VIEWS).map(([key, item]) => (
+            <a key={key} className={`nav-item ${view === key ? 'active' : ''}`} href={`#${key}`} aria-current={view === key ? 'page' : undefined}><item.icon size={18} />{item.title}</a>
+          ))}
         </nav>
         <div className="local-card">
           <ShieldCheck size={20} />
@@ -499,8 +514,8 @@ function App() {
       <main className="main">
         <header className="topbar">
           <div>
-            <h1>粉丝变化仪表盘</h1>
-            <p>发现谁取关了你，本地留存可枚举粉丝变化账本。</p>
+            <h1>{VIEWS[view].title}</h1>
+            <p>{VIEWS[view].description}</p>
           </div>
           <div className="top-actions">
             <a className={`button ghost ${isDemoMode ? 'disabled' : ''}`} href={exportUrl('latest.json')}>
@@ -516,6 +531,13 @@ function App() {
           </div>
         </header>
 
+        {error && <div role="alert" className="notice warning">数据更新失败：{error}。当前保留上次结果，请刷新重试。</div>}
+        {scanActionError && view !== 'settings' && <div role="alert" className="notice warning">{scanActionError}</div>}
+        {view !== 'settings' && scanStatus && (scanRunning || scanStatus.status === 'failed') && (
+          <a className="notice scan-global-status" href="#settings" role="status">
+            <Activity size={18} /><span>{PHASE_LABELS[scanStatus.phase] || scanStatus.status} · 已采集 {scanStatus.count} 位 · 查看进度与处理提示 →</span>
+          </a>
+        )}
         {!data.summary.hasDatabase && (
           <section className="notice warning">
             <AlertTriangle size={18} />
@@ -523,11 +545,14 @@ function App() {
           </section>
         )}
 
-        <section className="notice">
+        {view === 'overview' && <section className="notice">
           <Database size={18} />
           <span>只统计当前账号可枚举的粉丝列表；隐藏或不可用账号只作为数量差值展示，不尝试补全。</span>
-        </section>
+        </section>}
 
+        {view === 'settings' && <>
+        <details className="connection-help">
+          <summary>连接帮助与首次设置</summary>
         <SetupPanel
           summary={data.summary}
           runs={data.runs}
@@ -536,6 +561,7 @@ function App() {
           scanStatus={scanStatus}
           isDemo={isDemoMode}
         />
+        </details>
 
         <ScanControlPanel
           status={scanStatus}
@@ -555,7 +581,9 @@ function App() {
           onCookieImport={handleCookieImport}
           onCookieClear={handleCookieClear}
         />
+        </>}
 
+        {view === 'overview' && <>
         <section className="metrics" id="overview">
           {cards.map((card) => {
             const Icon = card.icon;
@@ -570,6 +598,9 @@ function App() {
           })}
         </section>
 
+        <a className="relationship-callout" href="#events" onClick={() => { setEventType('mutual_unfollowed_you'); setEventQuery(''); setEventOffset(0); }}>
+          <UserMinus size={22} /><div><strong>优先查看：互关后取关我</strong><p>查看历史互关证据及确认事件。旧记录关系未知时，不回溯推断互关。</p></div><ChevronRight size={20} />
+        </a>
         <section className="dashboard-grid">
           <article className="panel wide">
             <PanelHeader icon={Activity} title="粉丝趋势" subtitle="主页粉丝数与可枚举列表同步展示" />
@@ -596,8 +627,15 @@ function App() {
             <RunSummary run={data.summary.latestRun} />
           </article>
         </section>
+        </>}
 
+        {(view === 'events' || view === 'followers') &&
         <section className="tables">
+          {view === 'events' && <>
+          <div className="event-shortcuts" aria-label="常用事件筛选">
+            {[['mutual_unfollowed_you', '互关后取关我'], ['', '全部事件'], ['suspected_removed', '疑似取关']].map(([value, label]) => <button key={value} type="button" className={`button ${eventType === value ? 'primary' : 'ghost'}`} aria-pressed={eventType === value} onClick={() => { setEventType(value); setEventOffset(0); }}>{label}</button>)}
+          </div>
+          <p className="page-explanation">连续两次完整采集缺失后确认取关。检测时间不等于实际取关时间；历史关系未知不代表没有互关。</p>
           <article className="panel table-panel" id="events">
             <TableHeader
               icon={History}
@@ -628,6 +666,7 @@ function App() {
                 </>
               )}
             />
+            {!data.summary.latestRun && <div className="notice">尚无采集记录，请先到采集设置建立完整基线。</div>}
             <EventsTable events={events?.rows || []} />
             <PaginationBar
               page={events}
@@ -639,7 +678,9 @@ function App() {
               }}
             />
           </article>
+          </>}
 
+          {view === 'followers' &&
           <article className="panel table-panel" id="followers">
             <TableHeader
               icon={CircleDot}
@@ -680,9 +721,10 @@ function App() {
                 setFollowerOffset(0);
               }}
             />
-          </article>
-        </section>
+          </article>}
+        </section>}
 
+        {view === 'settings' &&
         <section className="panel runs-panel" id="runs">
           <PanelHeader icon={GitBranch} title="扫描运行记录" subtitle="recent/full/monitor 的最近执行状态" />
           <RunsTable runs={data.runs} selectedRunId={selectedRunId} onSelectRun={setSelectedRunId} />
@@ -698,7 +740,7 @@ function App() {
             onToChange={setCompareTo}
             onCompare={handleCompareRuns}
           />
-        </section>
+        </section>}
       </main>
     </div>
   );

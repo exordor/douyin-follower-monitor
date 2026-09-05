@@ -135,26 +135,54 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
   const consoleErrors = trackConsoleErrors(page);
+  await page.route('**/api/summary', async (route) => {
+    const response = await route.fetch();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await route.fulfill({ response });
+  });
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: 'domcontentloaded' });
   assert.deepEqual(consoleErrors, []);
-  await expectText(page, '粉丝变化仪表盘');
+  await page.getByRole('heading', { name: '概览', exact: true }).waitFor();
+  assert.equal(await page.locator('#events').count(), 0);
+  assert.equal(await page.locator('#setup').count(), 0);
   await expectText(page, '可枚举粉丝');
   await expectText(page, '粉丝趋势');
-  await expectText(page, 'Setup / 快速开始');
-  await expectText(page, 'Runtime 健康');
+  assert.equal(await page.locator('svg.chart').count() >= 2, true);
+  await page.getByRole('link', { name: '关系事件', exact: true }).click();
+  await page.locator('#events').waitFor();
+  assert.equal(await page.locator('#overview').count(), 0);
+  assert.equal(await page.locator('#followers').count(), 0);
+  assert.equal(await page.locator('#events select').first().inputValue(), 'mutual_unfollowed_you');
+  assert.equal(await page.locator('#events tbody tr').count(), 0, 'Late overview must not replace the selected mutual-event results');
+  await page.locator('#events select').first().selectOption('');
   await expectText(page, '粉丝事件');
   await expectText(page, '晨间剪辑师');
+  await page.getByRole('link', { name: '粉丝列表', exact: true }).click();
+  await page.locator('#followers').waitFor();
+  await page.goBack();
+  await page.locator('#events').waitFor();
+  assert.equal(await page.locator('#events select').first().inputValue(), '');
+  await page.getByRole('link', { name: '采集设置', exact: true }).click();
+  await expectText(page, 'Runtime 健康');
+  await page.getByText('连接帮助与首次设置', { exact: true }).click();
+  await expectText(page, 'Setup / 快速开始');
   await expectText(page, 'Run detail');
   await page.getByRole('button', { name: /对比/ }).click();
   await expectText(page, 'Added');
-  assert.equal(await page.locator('svg.chart').count() >= 2, true);
-  assert.equal(await page.locator('table').count() >= 3, true);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expectText(page, '粉丝变化仪表盘');
-  await expectText(page, 'Setup / 快速开始');
+  await page.getByRole('heading', { name: '采集设置', exact: true }).waitFor();
   assert.equal(await page.locator('body').evaluate((body) => body.scrollWidth <= window.innerWidth + 2), true);
+  for (const name of ['概览', '关系事件', '粉丝列表']) {
+    await page.getByRole('link', { name, exact: true }).click();
+    await page.getByRole('heading', { name, exact: true, level: 1 }).waitFor();
+    assert.equal(await page.locator('body').evaluate((body) => body.scrollWidth <= window.innerWidth + 2), true, `${name} must fit mobile viewport`);
+  }
+  await page.goto(`http://127.0.0.1:${port}/#runs`);
+  await page.getByRole('heading', { name: '采集设置', exact: true }).waitFor();
+  await page.goto(`http://127.0.0.1:${port}/#unknown`);
+  await page.getByRole('heading', { name: '概览', exact: true }).waitFor();
 
   const waitingPort = await getFreePort();
   const waitingServer = createDashboardServer({
@@ -169,6 +197,8 @@ try {
   try {
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.goto(`http://127.0.0.1:${waitingPort}`, { waitUntil: 'domcontentloaded' });
+    await expectText(page, '等待验证');
+    await page.getByRole('link', { name: '采集设置', exact: true }).click();
     await expectText(page, '等待验证码');
     await expectText(page, '剩余');
     await expectText(page, '不会自动识别或绕过验证码');
