@@ -24,6 +24,7 @@ function buildNotificationPayload({ options = {}, followers = [], change = {}, s
     newCount: change.newCount ?? change.addedCount ?? 0,
     suspectedRemovedCount: change.suspectedRemovedCount ?? 0,
     removedCount: change.removedCount ?? 0,
+    mutualUnfollowedYouCount: change.mutualUnfollowedYouCount ?? 0,
     renamedCount: change.renamedCount ?? 0,
     reappearedCount: change.reappearedCount ?? 0
   };
@@ -34,7 +35,10 @@ function notificationTitle(payload) {
 }
 
 function notificationMessage(payload) {
-  return `新增 ${payload.newCount}，疑似 ${payload.suspectedRemovedCount}，确认 ${payload.removedCount}，可枚举 ${payload.enumerableCount}`;
+  const mutualUnfollow = payload.mutualUnfollowedYouCount > 0
+    ? `，互关后取关我 ${payload.mutualUnfollowedYouCount}`
+    : '';
+  return `新增 ${payload.newCount}，疑似 ${payload.suspectedRemovedCount}，确认 ${payload.removedCount}${mutualUnfollow}，可枚举 ${payload.enumerableCount}`;
 }
 
 async function sendMacNotification(payload, { execFile = execFileAsync, platform = process.platform } = {}) {

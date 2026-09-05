@@ -117,6 +117,7 @@ export async function loadRunDetail(runId: string): Promise<ScanRunDetail> {
         renamed: rows.filter((event) => event.type === 'renamed').length,
         suspected_removed: rows.filter((event) => event.type === 'suspected_removed').length,
         removed: rows.filter((event) => event.type === 'removed').length,
+        mutual_unfollowed_you: rows.filter((event) => event.type === 'mutual_unfollowed_you').length,
         reappeared: rows.filter((event) => event.type === 'reappeared').length
       }
     };

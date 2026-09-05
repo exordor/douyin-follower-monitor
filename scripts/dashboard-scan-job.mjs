@@ -578,6 +578,7 @@ function createScanJobManager({
           newCount: latestChange.newCount ?? latestChange.addedCount ?? 0,
           suspectedRemovedCount: latestChange.suspectedRemovedCount ?? 0,
           removedCount: latestChange.removedCount ?? 0,
+          mutualUnfollowedYouCount: latestChange.mutualUnfollowedYouCount ?? 0,
           reappearedCount: latestChange.reappearedCount ?? 0,
           renamedCount: latestChange.renamedCount ?? 0,
           hiddenOrUnavailableCount: latestChange.hiddenOrUnavailableCount ?? null

@@ -44,6 +44,7 @@
       "newCount": 37,
       "suspectedRemovedCount": 8,
       "removedCount": 2,
+      "mutualUnfollowedYouCount": 1,
       "renamedCount": 4,
       "reappearedCount": 1
     },
@@ -51,6 +52,7 @@
       "newCount": 37,
       "suspectedRemovedCount": 8,
       "removedCount": 2,
+      "mutualUnfollowedYouCount": 1,
       "renamedCount": 4,
       "reappearedCount": 1
     }
@@ -80,22 +82,23 @@
     "limit": 20,
     "offset": 0,
     "rows": [
-      { "id": "demo-sec-001", "uid": "10001", "nickname": "晨间剪辑师", "profileUrl": "https://www.douyin.com/user/demo-sec-001", "firstSeenAt": "2026-05-28T09:41:00.000Z", "lastSeenAt": "2026-05-28T09:45:30.000Z", "lastFullSeenAt": "2026-05-26T08:15:20.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0 },
-      { "id": "demo-sec-002", "uid": "10002", "nickname": "山城记录员", "profileUrl": "https://www.douyin.com/user/demo-sec-002", "firstSeenAt": "2026-05-28T09:42:00.000Z", "lastSeenAt": "2026-05-28T09:45:20.000Z", "lastFullSeenAt": "2026-05-26T08:15:18.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0 },
-      { "id": "demo-sec-003", "uid": "10003", "nickname": "算法观察者", "profileUrl": "https://www.douyin.com/user/demo-sec-003", "firstSeenAt": "2026-05-26T08:12:00.000Z", "lastSeenAt": "2026-05-26T08:17:02.000Z", "lastFullSeenAt": "2026-05-26T08:17:02.000Z", "status": "suspected_removed", "suspectedRemovedAt": "2026-05-28T09:46:00.000Z", "removedAt": null, "missingFullScans": 1 },
-      { "id": "demo-sec-004", "uid": "10004", "nickname": "封面设计工坊", "profileUrl": "https://www.douyin.com/user/demo-sec-004", "firstSeenAt": "2026-05-20T08:11:00.000Z", "lastSeenAt": "2026-05-23T08:16:02.000Z", "lastFullSeenAt": "2026-05-23T08:16:02.000Z", "status": "removed", "suspectedRemovedAt": "2026-05-26T08:19:00.000Z", "removedAt": "2026-05-28T09:46:00.000Z", "missingFullScans": 2 },
-      { "id": "demo-sec-005", "uid": "10005", "nickname": "深夜数据台", "profileUrl": "https://www.douyin.com/user/demo-sec-005", "firstSeenAt": "2026-05-25T08:00:00.000Z", "lastSeenAt": "2026-05-28T09:45:02.000Z", "lastFullSeenAt": "2026-05-26T08:14:20.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0 },
-      { "id": "demo-sec-006", "uid": "10006", "nickname": "留学影像册", "profileUrl": "https://www.douyin.com/user/demo-sec-006", "firstSeenAt": "2026-05-22T08:01:00.000Z", "lastSeenAt": "2026-05-28T09:44:02.000Z", "lastFullSeenAt": "2026-05-26T08:12:20.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0 }
+      { "id": "demo-sec-001", "uid": "10001", "nickname": "晨间剪辑师", "profileUrl": "https://www.douyin.com/user/demo-sec-001", "firstSeenAt": "2026-05-28T09:41:00.000Z", "lastSeenAt": "2026-05-28T09:45:30.000Z", "lastFullSeenAt": "2026-05-26T08:15:20.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0, "relationshipStatus": "mutual", "relationshipObservedAt": "2026-05-28T09:45:30.000Z" },
+      { "id": "demo-sec-002", "uid": "10002", "nickname": "山城记录员", "profileUrl": "https://www.douyin.com/user/demo-sec-002", "firstSeenAt": "2026-05-28T09:42:00.000Z", "lastSeenAt": "2026-05-28T09:45:20.000Z", "lastFullSeenAt": "2026-05-26T08:15:18.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0, "relationshipStatus": "follower_only", "relationshipObservedAt": "2026-05-28T09:45:20.000Z" },
+      { "id": "demo-sec-003", "uid": "10003", "nickname": "算法观察者", "profileUrl": "https://www.douyin.com/user/demo-sec-003", "firstSeenAt": "2026-05-26T08:12:00.000Z", "lastSeenAt": "2026-05-26T08:17:02.000Z", "lastFullSeenAt": "2026-05-26T08:17:02.000Z", "status": "suspected_removed", "suspectedRemovedAt": "2026-05-28T09:46:00.000Z", "removedAt": null, "missingFullScans": 1, "relationshipStatus": "unknown", "relationshipObservedAt": null },
+      { "id": "demo-sec-004", "uid": "10004", "nickname": "封面设计工坊", "profileUrl": "https://www.douyin.com/user/demo-sec-004", "firstSeenAt": "2026-05-20T08:11:00.000Z", "lastSeenAt": "2026-05-23T08:16:02.000Z", "lastFullSeenAt": "2026-05-23T08:16:02.000Z", "status": "removed", "suspectedRemovedAt": "2026-05-26T08:19:00.000Z", "removedAt": "2026-05-28T09:46:00.000Z", "missingFullScans": 2, "relationshipStatus": "mutual", "relationshipObservedAt": "2026-05-23T08:16:02.000Z" },
+      { "id": "demo-sec-005", "uid": "10005", "nickname": "深夜数据台", "profileUrl": "https://www.douyin.com/user/demo-sec-005", "firstSeenAt": "2026-05-25T08:00:00.000Z", "lastSeenAt": "2026-05-28T09:45:02.000Z", "lastFullSeenAt": "2026-05-26T08:14:20.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0, "relationshipStatus": "unknown", "relationshipObservedAt": null },
+      { "id": "demo-sec-006", "uid": "10006", "nickname": "留学影像册", "profileUrl": "https://www.douyin.com/user/demo-sec-006", "firstSeenAt": "2026-05-22T08:01:00.000Z", "lastSeenAt": "2026-05-28T09:44:02.000Z", "lastFullSeenAt": "2026-05-26T08:12:20.000Z", "status": "active", "suspectedRemovedAt": null, "removedAt": null, "missingFullScans": 0, "relationshipStatus": "follower_only", "relationshipObservedAt": "2026-05-28T09:44:02.000Z" }
     ]
   },
   "events": {
-    "total": 6,
+    "total": 7,
     "limit": 20,
     "offset": 0,
     "rows": [
       { "eventId": 1101, "followerId": "demo-sec-001", "type": "new", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:45:30.000Z", "payload": { "nickname": "晨间剪辑师" }, "nickname": "晨间剪辑师", "profileUrl": "https://www.douyin.com/user/demo-sec-001", "status": "active" },
       { "eventId": 1102, "followerId": "demo-sec-003", "type": "suspected_removed", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:46:00.000Z", "payload": { "missingFullScans": 1 }, "nickname": "算法观察者", "profileUrl": "https://www.douyin.com/user/demo-sec-003", "status": "suspected_removed" },
       { "eventId": 1103, "followerId": "demo-sec-004", "type": "removed", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:46:02.000Z", "payload": { "missingFullScans": 2 }, "nickname": "封面设计工坊", "profileUrl": "https://www.douyin.com/user/demo-sec-004", "status": "removed" },
+      { "eventId": 1104, "followerId": "demo-sec-004", "type": "mutual_unfollowed_you", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:46:02.000Z", "payload": { "missingFullScans": 2, "relationshipStatus": "mutual" }, "nickname": "封面设计工坊", "profileUrl": "https://www.douyin.com/user/demo-sec-004", "status": "removed" },
       { "eventId": 1104, "followerId": "demo-sec-005", "type": "renamed", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:46:05.000Z", "payload": { "before": "数据台", "after": "深夜数据台" }, "nickname": "深夜数据台", "profileUrl": "https://www.douyin.com/user/demo-sec-005", "status": "active" },
       { "eventId": 1105, "followerId": "demo-sec-006", "type": "reappeared", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:46:09.000Z", "payload": { "previousStatus": "suspected_removed" }, "nickname": "留学影像册", "profileUrl": "https://www.douyin.com/user/demo-sec-006", "status": "active" },
       { "eventId": 1106, "followerId": "demo-sec-002", "type": "new", "runId": "run-demo-20260528", "createdAt": "2026-05-28T09:45:20.000Z", "payload": { "nickname": "山城记录员" }, "nickname": "山城记录员", "profileUrl": "https://www.douyin.com/user/demo-sec-002", "status": "active" }

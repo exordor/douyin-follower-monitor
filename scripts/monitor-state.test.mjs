@@ -48,6 +48,47 @@ async function withDb(fn) {
   }
 }
 
+async function verifyVersionOneMigration() {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'douyin-monitor-v1-test-'));
+  const dbPath = path.join(dir, 'followers.db');
+  const { DatabaseSync } = await import('node:sqlite');
+  const legacyDb = new DatabaseSync(dbPath);
+  legacyDb.exec(`
+    CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO meta (key, value) VALUES ('schema_version', '1');
+    CREATE TABLE followers (
+      id TEXT PRIMARY KEY,
+      uid TEXT,
+      nickname TEXT NOT NULL DEFAULT '',
+      profileUrl TEXT NOT NULL DEFAULT '',
+      firstSeenAt TEXT NOT NULL,
+      lastSeenAt TEXT NOT NULL,
+      lastFullSeenAt TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      suspectedRemovedAt TEXT,
+      removedAt TEXT,
+      missingFullScans INTEGER NOT NULL DEFAULT 0
+    );
+    INSERT INTO followers (
+      id, uid, nickname, profileUrl, firstSeenAt, lastSeenAt, status
+    ) VALUES ('legacy-row', '', 'legacy', '', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'active');
+  `);
+  legacyDb.close();
+
+  const migratedDb = await openMonitorDatabase(dbPath);
+  try {
+    assert.equal(migratedDb.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get().value, '2');
+    const row = migratedDb.prepare("SELECT relationshipStatus, relationshipObservedAt FROM followers WHERE id = 'legacy-row'").get();
+    assert.equal(row.relationshipStatus, 'unknown');
+    assert.equal(row.relationshipObservedAt, null);
+  } finally {
+    closeMonitorDatabase(migratedDb);
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+await verifyVersionOneMigration();
+
 await withDb(async (db) => {
   assert.equal(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get().value, '2');
   const columns = db.prepare('PRAGMA table_info(followers)').all().map((row) => row.name);

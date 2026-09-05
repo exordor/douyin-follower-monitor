@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildNotificationPayload,
+  notificationMessage,
   parseNotifyConfig,
   sendNotification
 } from './notify.mjs';
@@ -26,6 +27,7 @@ const payload = buildNotificationPayload({
     newCount: 1,
     suspectedRemovedCount: 2,
     removedCount: 3,
+    mutualUnfollowedYouCount: 1,
     renamedCount: 4,
     reappearedCount: 5,
     hiddenOrUnavailableCount: 8
@@ -38,6 +40,8 @@ assert.equal('collectedAt' in payload, false);
 assert.equal(payload.enumerableCount, 2);
 assert.equal(payload.profileFollowerCount, 10);
 assert.equal(payload.newCount, 1);
+assert.equal(payload.mutualUnfollowedYouCount, 1);
+assert.match(notificationMessage(payload), /互关后取关我 1/);
 assert.equal(JSON.stringify(payload).includes('不应外发'), false);
 assert.equal(JSON.stringify(payload).includes('sec-a'), false);
 

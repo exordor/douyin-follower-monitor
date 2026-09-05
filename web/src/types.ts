@@ -161,6 +161,7 @@ export interface ScanJobChangeSummary {
   newCount: number;
   suspectedRemovedCount: number;
   removedCount: number;
+  mutualUnfollowedYouCount: number;
   reappearedCount: number;
   renamedCount: number;
   hiddenOrUnavailableCount?: number | null;

@@ -1080,7 +1080,7 @@ function ScanControlPanel({
       {change && (
         <div className="scan-summary">
           <span>完成摘要</span>
-          <strong>新增 {formatNumber(change.newCount)} · 疑似 {formatNumber(change.suspectedRemovedCount)} · 确认 {formatNumber(change.removedCount)} · 改名 {formatNumber(change.renamedCount)} · 隐藏差值 {formatNumber(change.hiddenOrUnavailableCount)}</strong>
+          <strong>新增 {formatNumber(change.newCount)} · 疑似 {formatNumber(change.suspectedRemovedCount)} · 确认 {formatNumber(change.removedCount)} · 互关后取关我 {formatNumber(change.mutualUnfollowedYouCount)} · 改名 {formatNumber(change.renamedCount)} · 隐藏差值 {formatNumber(change.hiddenOrUnavailableCount)}</strong>
         </div>
       )}
 

@@ -1708,7 +1708,7 @@ function printDiffSummary(change) {
   if (change.mode || change.reason) {
     console.log(`扫描模式: ${change.mode || 'unknown'} (${change.reason || 'no-reason'})`);
   }
-  console.log(`新增: ${change.newCount ?? change.addedCount}，疑似取关: ${change.suspectedRemovedCount || 0}，确认取关: ${change.removedCount}，重新出现: ${change.reappearedCount || 0}，改名: ${change.renamedCount}`);
+  console.log(`新增: ${change.newCount ?? change.addedCount}，疑似取关: ${change.suspectedRemovedCount || 0}，确认取关: ${change.removedCount}，互关后取关我: ${change.mutualUnfollowedYouCount || 0}，重新出现: ${change.reappearedCount || 0}，改名: ${change.renamedCount}`);
   if (Number.isFinite(change.hiddenOrUnavailableCount)) {
     console.log(`主页粉丝数与可枚举列表差值: ${change.hiddenOrUnavailableCount}`);
   }
