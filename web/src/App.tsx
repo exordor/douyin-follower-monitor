@@ -551,6 +551,13 @@ function App() {
         </section>}
 
         {view === 'settings' && <>
+        <section className="mobile-only mobile-settings">
+          <article className="mobile-record connection-summary"><strong>{scanStatus?.runtimeLabel || '采集连接'}</strong><p>{PHASE_LABELS[scanStatus?.phase || 'idle'] || '空闲'} · {MODE_LABELS[scanConfig?.mode || 'monitor']}</p><small>采集在电脑执行，手机侧查看状态。</small></article>
+          <article className="mobile-record"><strong>登录状态 · {cookieAuth?.configured ? 'Cookie 已配置' : '未配置 Cookie'}</strong><p>复用固定浏览器配置，失效时在电脑更新。</p><small>启动浏览器、导入 Cookie 和人工验证请在电脑完成。</small></article>
+          {scanStatus?.authChallenge?.status === 'waiting' && <article className="mobile-record"><strong>等待电脑端验证</strong><p>{scanStatus.authChallenge.message}</p></article>}
+          <p className="page-explanation">手机访问需另行配置安全连接；本次改版不开放本机服务或 CDP 端口。</p>
+        </section>
+        <div className="desktop-collection">
         <details className="connection-help">
           <summary>连接帮助与首次设置</summary>
         <SetupPanel
@@ -581,6 +588,7 @@ function App() {
           onCookieImport={handleCookieImport}
           onCookieClear={handleCookieClear}
         />
+        </div>
         </>}
 
         {view === 'overview' && <>
@@ -1342,9 +1350,18 @@ function EventTypePill({ value }: { value: EventType }) {
 }
 
 function EventsTable({ events }: { events: FollowerEvent[] }) {
+  const [selected, setSelected] = useState<FollowerEvent | null>(null);
   if (!events.length) return <div className="empty-state">没有匹配的事件</div>;
   return (
-    <div className="table-wrap">
+    <>
+    <div className="mobile-records">
+      {events.map(event => <article className="mobile-record" key={event.eventId}>
+        <div className="mobile-record-heading"><strong>{event.nickname || event.followerId}</strong><button type="button" onClick={() => setSelected(event)}>查看详情</button></div>
+        <EventTypePill value={event.type} /><small>{formatDate(event.createdAt)} · 检测时间</small>
+      </article>)}
+    </div>
+    {selected && <EventDetail event={selected} onClose={() => setSelected(null)} />}
+    <div className="table-wrap desktop-records">
       <table>
         <thead>
           <tr>
@@ -1371,13 +1388,40 @@ function EventsTable({ events }: { events: FollowerEvent[] }) {
         </tbody>
       </table>
     </div>
+    </>
   );
+}
+
+function EventDetail({ event, onClose }: { event: FollowerEvent; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, []);
+  return <dialog ref={dialog} className="event-dialog" aria-labelledby="event-detail-title" onCancel={onClose}>
+    <button className="button ghost" type="button" onClick={onClose}>返回关系事件</button>
+    <h2 id="event-detail-title">事件详情</h2>
+    <article className="mobile-record"><h3>{event.nickname || event.followerId}</h3><EventTypePill value={event.type} /><p>检测时间：{formatDate(event.createdAt)}</p></article>
+    <article className="mobile-record"><h3>关联采集记录</h3><code>{event.runId}</code><p>{event.type === 'mutual_unfollowed_you' ? '该记录被标记为互关后取关我。历史互关与完整采集缺失是此类事件的判定依据。' : '此处展示已保存的事件记录，不额外推断历史互关关系。'}</p></article>
+    <article className="mobile-record connection-summary"><strong>检测时间不等于实际取关时间</strong><p>未提供的历史时间点不补写；失败或不完整采集不用于确认取关。</p></article>
+    {event.profileUrl && <a className="button primary" href={event.profileUrl} target="_blank" rel="noreferrer">查看抖音主页</a>}
+  </dialog>;
 }
 
 function FollowersTable({ followers }: { followers: Follower[] }) {
   if (!followers.length) return <div className="empty-state">没有匹配的粉丝</div>;
   return (
-    <div className="table-wrap">
+    <>
+    <div className="mobile-records">
+      {followers.map(follower => <article className="mobile-record" key={follower.id}>
+        <div className="mobile-record-heading"><a className="table-link" href={follower.profileUrl} target="_blank" rel="noreferrer">{follower.nickname || follower.id}<ExternalLink size={13} /></a><RelationshipPill value={follower.relationshipStatus || 'unknown'} /></div>
+        <small>最近出现 {formatDate(follower.lastSeenAt)}</small>
+        <details><summary>查看记录</summary><p>首次出现 {formatDate(follower.firstSeenAt)}</p><p>完整采集缺失 {formatNumber(follower.missingFullScans || 0)} 次</p><FollowerStatusPill value={follower.status} /><p className="sub-id">{follower.uid || follower.id}</p></details>
+      </article>)}
+    </div>
+    <div className="table-wrap desktop-records">
       <table>
         <thead>
           <tr>
@@ -1409,6 +1453,7 @@ function FollowersTable({ followers }: { followers: Follower[] }) {
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
@@ -1544,7 +1589,15 @@ function CompareList({ title, rows }: { title: string; rows: FollowerEvent[] }) 
 function RunsTable({ runs, selectedRunId, onSelectRun }: { runs: ScanRun[]; selectedRunId: string; onSelectRun: (runId: string) => void }) {
   if (!runs.length) return <div className="empty-state">暂无扫描运行记录</div>;
   return (
-    <div className="table-wrap">
+    <>
+    <div className="mobile-records">
+      {runs.map(run => <article className="mobile-record" key={run.runId}>
+        <div className="mobile-record-heading"><strong>{formatDate(run.startedAt)} · {MODE_LABELS[run.mode] || run.mode}</strong><StatusPill value={run.status} /></div>
+        <small>主页 / 可枚举：{formatNumber(run.profileFollowerCount)} / {formatNumber(run.enumerableCount)}</small>
+        <button className="button ghost" aria-pressed={selectedRunId === run.runId} type="button" onClick={() => { onSelectRun(run.runId); document.querySelector('.run-detail')?.scrollIntoView({ block: 'start' }); }}>查看采集记录</button>
+      </article>)}
+    </div>
+    <div className="table-wrap desktop-records">
       <table>
         <thead>
           <tr>
@@ -1575,6 +1628,7 @@ function RunsTable({ runs, selectedRunId, onSelectRun }: { runs: ScanRun[]; sele
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 

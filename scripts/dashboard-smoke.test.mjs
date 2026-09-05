@@ -190,11 +190,27 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: '采集设置', exact: true }).waitFor();
+  assert.equal(await page.locator('.nav').evaluate(n => getComputedStyle(n).position), 'fixed');
+  assert.equal(await page.getByRole('button', { name: '打开采集浏览器', exact: true }).isVisible(), false);
+  await page.getByRole('link', { name: '关系事件', exact: true }).click();
+  await page.locator('#events select').first().selectOption('');
+  await page.locator('#events .mobile-records article').first().waitFor();
+  await page.locator('#events .mobile-records').getByRole('button', { name: '查看详情' }).first().click();
+  await page.getByRole('dialog', { name: '事件详情' }).waitFor();
+  await page.getByRole('button', { name: '返回关系事件' }).click();
+  assert.equal(await page.getByRole('dialog').count(), 0);
   assert.equal(await page.locator('body').evaluate((body) => body.scrollWidth <= window.innerWidth + 2), true);
-  for (const name of ['概览', '关系事件', '粉丝列表']) {
+  for (const name of ['概览', '关系事件', '粉丝列表', '采集设置']) {
     await page.getByRole('link', { name, exact: true }).click();
     await page.getByRole('heading', { name, exact: true, level: 1 }).waitFor();
     assert.equal(await page.locator('body').evaluate((body) => body.scrollWidth <= window.innerWidth + 2), true, `${name} must fit mobile viewport`);
+    await page.screenshot({ path: `output/playwright/mobile-${name}.png` });
+  }
+  await page.locator('#runs > .mobile-records').waitFor({ timeout: 3000 });
+  await page.setViewportSize({ width: 320, height: 700 });
+  for (const name of ['概览', '关系事件', '粉丝列表', '采集设置']) {
+    await page.getByRole('link', { name, exact: true }).click();
+    assert.equal(await page.locator('body').evaluate(body => body.scrollWidth <= window.innerWidth + 2), true, `${name} must fit 320px`);
   }
   await page.goto(`http://127.0.0.1:${port}/#runs`);
   await page.getByRole('heading', { name: '采集设置', exact: true }).waitFor();
@@ -231,7 +247,7 @@ try {
 }
 
 async function expectText(page, text) {
-  await page.getByText(text, { exact: false }).first().waitFor({ timeout: 5000 });
+  await page.getByText(text, { exact: false }).filter({ visible: true }).first().waitFor({ timeout: 5000 });
 }
 
 function trackConsoleErrors(page) {
